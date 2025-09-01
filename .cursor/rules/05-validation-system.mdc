@@ -1,0 +1,202 @@
+---
+description: "Validation system with Standard Schema and Zod adapter"
+---
+
+# Validation System Architecture
+
+## Standard Schema Interface: [src/standard-schema.ts](mdc:src/standard-schema.ts)
+
+The library uses **Standard Schema V1** for vendor-agnostic validation, allowing
+multiple validation libraries.
+
+## Standard Schema Structure
+
+### Core Interface
+
+```typescript
+interface StandardSchemaV1<Input = unknown, Output = Input> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly validate: (
+      value: unknown,
+    ) => Result<Output> | Promise<Result<Output>>;
+    readonly types?: Types<Input, Output>;
+  };
+}
+```
+
+### Result Types
+
+```typescript
+type Result<Output> = SuccessResult<Output> | FailureResult;
+
+interface SuccessResult<Output> {
+  readonly value: Output;
+  readonly issues?: undefined;
+}
+
+interface FailureResult {
+  readonly issues: ReadonlyArray<Issue>;
+}
+```
+
+## Validation Adapter Pattern
+
+### Core Adapter Interface: [src/types.ts](mdc:src/types.ts) Lines 200-228
+
+```typescript
+interface ValidationAdapter<T extends DrizzleTableWithId> {
+  createInsertSchema: (table: T) => StandardSchemaV1<T["$inferInsert"]>;
+  createUpdateSchema: (
+    table: T,
+  ) => StandardSchemaV1<Partial<T["$inferInsert"]>>;
+  createListSchema: (
+    table: T,
+    options: ListSchemaOptions<T>,
+  ) => StandardSchemaV1<ListParams<T>>;
+  createPaginationSchema: (
+    options: PaginationOptions,
+  ) => StandardSchemaV1<PaginationParams>;
+  createIdSchema: (table: T) => StandardSchemaV1<T["$inferSelect"]["id"]>;
+  createFilterSchema: (
+    allowedFilters?: (keyof T["$inferSelect"])[],
+  ) => StandardSchemaV1<FilterParams<T>>;
+  createOrderBySchema: (
+    table: T,
+    allowedFields?: (keyof T["$inferSelect"])[],
+  ) => StandardSchemaV1<OrderByParams<T>>;
+}
+```
+
+## Zod Adapter Implementation: [src/zod.ts](mdc:src/zod.ts)
+
+### Adapter Factory
+
+```typescript
+function zod<T extends DrizzleTableWithId>(
+  options: ZodAdapterOptions<T> = {},
+): ValidationAdapter<T>;
+```
+
+### Schema Overrides
+
+- **Insert Schema**: Override table insert validation
+- **Update Schema**: Override table update validation
+- **List Schema**: Override list parameters validation
+- **Custom Schemas**: ID, filter, orderBy, pagination schemas
+
+### Default Schema Generators
+
+#### 1. Pagination Schema (Lines 94-107)
+
+```typescript
+z.object({
+  page: z.number().int().positive().optional().default(1),
+  limit: z.number().int().positive().max(maxLimit).optional().default(
+    defaultLimit,
+  ),
+});
+```
+
+#### 2. ID Schema (Lines 109-124)
+
+- **Auto-detects column type** from Drizzle table
+- Number/BigInt → `z.number()`
+- UUID → `z.string().uuid()`
+- Default → `z.string()`
+
+#### 3. Filter Schema (Lines 126-166)
+
+- **Dynamic schema based on allowedFilters**
+- Supports all filter operators (equals, not, gt, gte, lt, lte, in, like, ilike)
+- Handles AND/OR logic with recursive schema definition
+
+#### 4. OrderBy Schema (Lines 168-183)
+
+- **Enum validation** for field names from table columns
+- Direction enum: 'asc' | 'desc'
+- Array of orderBy objects support
+
+#### 5. List Schema (Lines 185-224)
+
+- **Combines all schemas**: pagination + search + filters + orderBy
+- **Conditional fields** based on options (search, includeDeleted)
+- **Comprehensive list parameter validation**
+
+## Validation Integration
+
+### In CRUD Operations
+
+```typescript
+// Validation happens automatically before operations
+const validatedData = await validate(
+  "create", // Operation type
+  data, // Input data
+  schemas.insertSchema, // Validation schema
+  context, // Operation context
+);
+```
+
+### Validation Context
+
+- **skipValidation**: Context flag to bypass validation
+- **Operation type**: create, update, list, etc.
+- **Custom validation hook**: User-defined validation function
+
+### Error Handling
+
+```typescript
+// Standard validation error format
+if (result.issues) {
+  throw new Error(JSON.stringify(result.issues, null, 2));
+}
+```
+
+## Usage Patterns
+
+### Basic Validation
+
+```typescript
+const crud = drizzleCrud(db, {
+  validation: zod(), // Uses default schemas
+});
+```
+
+### Custom Global Schemas
+
+```typescript
+const crud = drizzleCrud(db, {
+  validation: zod({
+    pagination: (options) =>
+      z.object({
+        page: z.number().min(1).max(1000),
+        limit: z.number().min(1).max(50), // Stricter limits
+      }),
+  }),
+});
+```
+
+### Per-Table Schema Overrides
+
+```typescript
+const users = crud(usersTable, {
+  validation: zod({
+    insert: (table) =>
+      z.object({
+        name: z.string().min(1).max(100),
+        email: z.string().email(),
+        age: z.number().int().min(13).max(120),
+      }),
+  }),
+});
+```
+
+## Benefits
+
+1. **Vendor Agnostic**: Can swap validation libraries without changing CRUD
+   logic
+2. **Type Safety**: Full TypeScript inference from table schemas
+3. **Extensible**: Easy to add custom validation rules
+4. **Performance**: Validation only when needed (skipValidation flag)
+5. **Composable**: Mix global and per-table validation rules

@@ -1,0 +1,215 @@
+---
+description: "Soft delete and scope filtering for multi-tenant security"
+---
+
+# Soft Delete & Scope Filtering System
+
+## Soft Delete Configuration
+
+### Configuration Structure: [src/types.ts](mdc:src/types.ts) Lines 45-49
+
+```typescript
+type SoftDeleteConfig<T extends DrizzleTable> = {
+  field: keyof T["$inferSelect"]; // Column name (e.g., 'deletedAt', 'isDeleted')
+  deletedValue?: any; // Value when deleted (default: new Date() or true)
+  notDeletedValue?: any; // Value when active (default: null or false)
+};
+```
+
+### Automatic Value Inference
+
+The system automatically determines appropriate values based on field type:
+
+- **Timestamp fields**: `new Date()` for deleted, `null` for active
+- **Boolean fields**: `true` for deleted, `false` for active
+- **Custom values**: Override via configuration
+
+### Implementation in CRUD Operations
+
+#### Delete Operations (Lines 378-406 in crud-factory.ts)
+
+```typescript
+const deleteOne = async (id, context) => {
+  if (softDelete) {
+    // Soft delete: UPDATE field = deletedValue
+    await db.update(table)
+      .set({ [softDelete.field]: deleteValues.deletedValue })
+      .where(conditions);
+  } else {
+    // Hard delete: DELETE FROM table
+    await db.delete(table).where(conditions);
+  }
+};
+```
+
+#### Query Filtering (Lines 185-193 in crud-factory.ts)
+
+```typescript
+const applySoftDeleteFilter = (conditions, includeDeleted = false) => {
+  if (!softDelete || includeDeleted) return conditions;
+
+  const column = getColumn(softDelete.field);
+  const notDeletedValue = softDelete.notDeletedValue ?? null;
+
+  conditions.push(eq(column, notDeletedValue));
+  return conditions;
+};
+```
+
+### Restore Operations
+
+- **restore()**: Sets soft delete field back to "not deleted" value
+- **permanentDelete()**: Performs actual DELETE regardless of soft delete config
+- **bulkRestore()**: Bulk restore multiple records
+
+## Scope Filtering System
+
+### Purpose & Use Cases
+
+- **Multi-tenant applications**: Filter by workspace/tenant ID
+- **User-based access control**: Filter by user permissions
+- **Organizational hierarchy**: Filter by department/team
+- **Regional restrictions**: Filter by geographic location
+
+### Configuration Structure: [src/types.ts](mdc:src/types.ts) Lines 145-154
+
+```typescript
+type ScopeFilters<T extends DrizzleTable, TActor extends Actor> =
+  & Partial<
+    {
+      [K in keyof T["$inferSelect"]]: (
+        value: T["$inferSelect"][K],
+        actor: TActor,
+      ) => SQL | undefined;
+    }
+  >
+  & Record<string, (value: any, actor: TActor) => SQL | undefined>;
+```
+
+### Actor System
+
+```typescript
+interface Actor<T = string, TProperties = Record<string, any>> {
+  type: T; // Actor type ('user', 'service', 'admin')
+  properties: TProperties; // Actor-specific data
+  metadata?: Record<string, any>; // Additional context
+}
+```
+
+## Implementation Examples
+
+### Multi-Tenant Setup
+
+```typescript
+const tenants = createCrud(tenantsTable, {
+  scopeFilters: {
+    workspaceId: (workspaceId, actor) => {
+      // Only allow access to actor's workspace
+      if (actor.properties.workspaceId !== workspaceId) {
+        return undefined; // Block access
+      }
+      return eq(tenantsTable.workspaceId, workspaceId);
+    },
+  },
+});
+
+// Usage with context
+const context = {
+  scope: { workspaceId: "workspace-123" },
+  actor: {
+    type: "user",
+    properties: { workspaceId: "workspace-123", userId: "user-456" },
+  },
+};
+
+await tenants.list({}, context); // Only sees workspace-123 data
+```
+
+### Role-Based Access Control
+
+```typescript
+const documents = createCrud(documentsTable, {
+  scopeFilters: {
+    ownerId: (ownerId, actor) => {
+      // Admins can see all, users only their own
+      if (actor.properties.role === "admin") {
+        return undefined; // No restriction
+      }
+      return eq(documentsTable.ownerId, actor.properties.userId);
+    },
+
+    department: (department, actor) => {
+      // Users can only see their department's docs
+      return eq(documentsTable.department, actor.properties.department);
+    },
+  },
+});
+```
+
+### Geographic Restrictions
+
+```typescript
+const orders = createCrud(ordersTable, {
+  scopeFilters: {
+    region: (region, actor) => {
+      const allowedRegions = actor.properties.allowedRegions;
+      return inArray(ordersTable.region, allowedRegions);
+    },
+  },
+});
+```
+
+## Automatic Application
+
+### Scope Filter Pipeline (Lines 167-183 in crud-factory.ts)
+
+```typescript
+const applyScopeFilters = (conditions, context) => {
+  Object.entries(scopeFilters).forEach(([key, filterFn]) => {
+    const condition = filterFn(
+      context?.scope?.[key], // Scope value
+      context?.actor, // Actor context
+    );
+
+    if (condition) {
+      conditions.push(condition);
+    }
+  });
+};
+```
+
+### Applied to All Operations
+
+- **findById**: Ensures user can only find allowed records
+- **list**: Filters list results to allowed scope
+- **update**: Prevents updating out-of-scope records
+- **delete**: Prevents deleting out-of-scope records
+- **create**: Can be combined with beforeCreate hook for scope assignment
+
+## Security Benefits
+
+### 1. Automatic Enforcement
+
+- **No manual SQL WHERE clauses** needed in application code
+- **Scope applied consistently** across all CRUD operations
+- **Impossible to forget** security filters
+
+### 2. Defense in Depth
+
+- **Multiple filter layers**: User filters + Search + Scope + Soft delete
+- **Type-safe configuration**: Compile-time validation of filter functions
+- **Context-aware filtering**: Different rules for different actors
+
+### 3. Audit & Compliance
+
+- **Soft delete preserves data** for audit trails
+- **Actor context tracking** for access logging
+- **Granular permission control** per table/operation
+
+## Performance Considerations
+
+1. **Index Strategy**: Ensure scope filter fields have appropriate indexes
+2. **Filter Order**: Most selective scope filters should be applied first
+3. **Condition Optimization**: Empty/undefined filters are skipped automatically
+4. **Query Planning**: Database can optimize combined WHERE conditions
+   efficiently

@@ -1,0 +1,410 @@
+---
+description: "Complete master guide for using drizzle-crud in other projects"
+---
+
+# 🚀 DRIZZLE-CRUD MASTER GUIDE
+
+**Complete TypeScript CRUD library** for Drizzle ORM with SQLite support
+(local + Turso).
+
+## 🏗️ Quick Setup
+
+### 1. Install Dependencies
+
+```bash
+bun add drizzle-orm drizzle-zod zod
+# For local SQLite: built-in with Bun
+# For Turso: bun add @libsql/client
+```
+
+### 2. Define Schema
+
+```typescript
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+const usersTable = sqliteTable("users", {
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  role: text("role", { enum: ["admin", "user"] }).notNull().default("user"),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }), // For soft delete
+});
+```
+
+### 3. Database Connection
+
+```typescript
+// OPTION A: Local SQLite
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+
+const sqlite = new Database("app.db"); // or ':memory:'
+const db = drizzle(sqlite, { schema: { users: usersTable } });
+
+// OPTION B: Turso (Remote SQLite)
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+
+const client = createClient({
+  url: "libsql://your-db.turso.io",
+  authToken: "your-token",
+});
+const db = drizzle(client, { schema: { users: usersTable } });
+```
+
+### 4. Create CRUD Factory
+
+```typescript
+import { drizzleCrud, zod } from "drizzle-crud";
+
+const createCrud = drizzleCrud(db, {
+  validation: zod(), // Optional global validation
+});
+
+const users = createCrud(usersTable, {
+  searchFields: ["name", "email"],
+  allowedFilters: ["name", "email", "role", "workspaceId"],
+  softDelete: { field: "deletedAt" },
+  defaultLimit: 20,
+  maxLimit: 100,
+});
+```
+
+## 🎯 Core Operations
+
+### Basic CRUD
+
+```typescript
+// Create - Returns full typed object
+const user = await users.create({
+  name: "Bruno Garcia",
+  email: "bruno@example.com",
+  workspaceId: "workspace-123",
+  role: "admin",
+});
+
+console.log(user.id); // ✅ Typed as number
+console.log(user.role); // ✅ Typed as 'admin' | 'user'
+
+// Read by ID
+const foundUser = await users.findById(user.id);
+
+// Update - Partial types enforced
+const updated = await users.update(user.id, {
+  name: "Bruno Garcia Updated",
+});
+
+// Delete (soft delete if configured)
+await users.deleteOne(user.id);
+
+// List with pagination and filters
+const usersList = await users.list({
+  search: "bruno",
+  filters: { role: "admin" },
+  page: 1,
+  limit: 10,
+});
+```
+
+### Bulk Operations
+
+```typescript
+// Bulk create (handles SQLite variable limits automatically)
+const result = await users.bulkCreate([
+  { name: "User 1", email: "user1@example.com", workspaceId: "ws-1" },
+  { name: "User 2", email: "user2@example.com", workspaceId: "ws-1" },
+  // ... up to thousands
+]);
+
+// Bulk delete
+const userIds = [1, 2, 3, 4, 5];
+await users.bulkDelete(userIds);
+
+// Bulk restore (if soft delete enabled)
+await users.bulkRestore(userIds);
+```
+
+### Advanced Queries
+
+```typescript
+// Column selection
+const profile = await users.findById(1, {
+  columns: {
+    id: true,
+    name: true,
+    email: false, // Exclude email
+  },
+});
+
+// Complex filters
+const filtered = await users.list({
+  filters: {
+    OR: [
+      { name: { like: "John%" } },
+      { email: { ilike: "%@company.com" } },
+    ],
+    AND: [
+      { role: "admin" },
+      { deletedAt: { equals: null } },
+    ],
+  },
+});
+```
+
+## 🔒 Multi-Tenant Security
+
+### Actor Interface
+
+```typescript
+interface UserActor extends Actor {
+  type: "user";
+  properties: {
+    userId: string;
+    workspaceId: string;
+    role: "admin" | "user";
+  };
+}
+```
+
+### Scope Filters
+
+```typescript
+const users = createCrud(usersTable, {
+  scopeFilters: {
+    workspaceId: (workspaceId: string, actor: UserActor) => {
+      // Automatic tenant isolation
+      if (actor.properties.workspaceId !== workspaceId) {
+        return undefined; // Block access
+      }
+      return eq(usersTable.workspaceId, workspaceId);
+    },
+  },
+});
+
+// Usage with context
+const context = {
+  scope: { workspaceId: "workspace-123" },
+  actor: {
+    type: "user",
+    properties: {
+      userId: "user-456",
+      workspaceId: "workspace-123",
+      role: "admin",
+    },
+  } satisfies UserActor,
+};
+
+// All operations respect scope automatically
+const scopedUsers = await users.list({}, context);
+```
+
+## 🛠️ Advanced Features
+
+### Soft Delete
+
+```typescript
+const users = createCrud(usersTable, {
+  softDelete: { field: "deletedAt" },
+});
+
+await users.deleteOne(1); // Sets deletedAt = new Date()
+await users.restore(1); // Sets deletedAt = null
+await users.permanentDelete(1); // Actual DELETE
+
+// Include soft deleted in queries
+const withDeleted = await users.list({ includeDeleted: true });
+```
+
+### Hooks System
+
+```typescript
+const users = createCrud(usersTable, {
+  hooks: {
+    beforeCreate: (data) => ({
+      ...data,
+      createdAt: new Date(),
+    }),
+    beforeUpdate: (data) => ({
+      ...data,
+      updatedAt: new Date(),
+    }),
+  },
+});
+```
+
+### Custom Validation
+
+```typescript
+import { z } from "zod";
+
+const users = createCrud(usersTable, {
+  validation: zod({
+    insert: () =>
+      z.object({
+        name: z.string().min(1).max(100),
+        email: z.string().email(),
+        role: z.enum(["admin", "user"]),
+      }),
+  }),
+});
+```
+
+## 📊 Type Safety
+
+### Automatic Inference
+
+```typescript
+// All types inferred automatically - no any types needed!
+const user = await users.create({ name: "Test", email: "test@example.com" });
+
+// TypeScript knows exact structure:
+const id: number = user.id;
+const name: string = user.name;
+const role: "admin" | "user" = user.role;
+```
+
+### Compile-Time Validation
+
+```typescript
+// ✅ Valid operations
+users.create({ name: "Test", email: "test@example.com" });
+users.list({ filters: { name: "Test" } });
+
+// ❌ TypeScript errors on invalid operations
+users.create({ invalidField: "error" }); // TS Error
+users.list({ filters: { invalidField: "error" } }); // TS Error
+```
+
+## 🧪 Testing
+
+### Test Setup
+
+```typescript
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { beforeEach, describe, expect, it } from "bun:test";
+
+describe("App CRUD Tests", () => {
+  let db, users;
+
+  beforeEach(() => {
+    const sqlite = new Database(":memory:");
+    db = drizzle(sqlite, { schema: { users: usersTable } });
+
+    // Create table
+    sqlite.run(`CREATE TABLE users (...)`);
+
+    const createCrud = drizzleCrud(db);
+    users = createCrud(usersTable);
+  });
+
+  it("should create user", async () => {
+    const user = await users.create({
+      name: "Test",
+      email: "test@example.com",
+    });
+    expect(user.id).toBeTypeOf("number");
+  });
+});
+```
+
+## 🚀 Production Examples
+
+### Real-World Implementation
+
+```typescript
+// Multi-tenant SaaS setup
+interface AppActor extends Actor {
+  type: "user" | "service";
+  properties: {
+    userId: string;
+    workspaceId: string;
+    role: "admin" | "member" | "viewer";
+    permissions: string[];
+  };
+}
+
+const users = createCrud(usersTable, {
+  searchFields: ["name", "email"],
+  allowedFilters: ["name", "email", "role", "status"],
+  softDelete: { field: "deletedAt" },
+  scopeFilters: {
+    workspaceId: (workspaceId, actor: AppActor) => {
+      return eq(usersTable.workspaceId, actor.properties.workspaceId);
+    },
+  },
+  hooks: {
+    beforeCreate: (data) => ({
+      ...data,
+      createdAt: new Date(),
+      createdBy: actor.properties.userId,
+    }),
+  },
+});
+```
+
+### Error Handling
+
+```typescript
+try {
+  const user = await users.create(userData, context);
+} catch (error) {
+  if (error.message.includes("validation")) {
+    // Handle validation errors
+  } else if (error.message.includes("Access denied")) {
+    // Handle scope filter violations
+  } else {
+    // Handle database errors
+  }
+}
+```
+
+## 📦 Package Integration
+
+### Dependencies
+
+```json
+{
+  "dependencies": {
+    "drizzle-crud": "^0.1.4",
+    "drizzle-orm": "^0.44.2",
+    "drizzle-zod": "^0.8.2",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@libsql/client": "^0.15.14" // If using Turso
+  }
+}
+```
+
+### Exports Available
+
+```typescript
+import {
+  drizzleCrud, // Main factory function
+  filtersToWhere, // Utility for custom queries
+  zod, // Zod validation adapter
+} from "drizzle-crud";
+
+import type {
+  Actor,
+  CrudOptions,
+  DrizzleDatabase,
+  FilterParams,
+  ListParams,
+  ValidationAdapter,
+} from "drizzle-crud";
+```
+
+## 🎯 Key Benefits
+
+- ✅ **Zero Configuration** - Works out of the box
+- ✅ **Type Safety** - Full TypeScript inference
+- ✅ **Multi-Database** - Local SQLite + Turso support
+- ✅ **Enterprise Features** - Soft delete, multi-tenant, validation
+- ✅ **Performance** - Optimized for scale (tested with 100k+ records)
+- ✅ **Extensible** - Hooks, custom validation, plugins
+
+**Perfect for SaaS applications, APIs, and any TypeScript project needing robust
+CRUD operations.**

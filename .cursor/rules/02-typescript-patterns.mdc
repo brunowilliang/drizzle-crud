@@ -1,0 +1,70 @@
+---
+globs: "*.ts,*.tsx"
+description: "TypeScript patterns and conventions used in drizzle-crud"
+---
+
+# TypeScript Patterns & Conventions
+
+## Advanced Type Usage
+
+This project uses **advanced TypeScript patterns** for maximum type safety:
+
+### 1. Conditional Types & Mapped Types
+
+- Extensive use of conditional types for type inference
+- Mapped types for transforming Drizzle table types
+- Template literal types for precise string operations
+
+### 2. Generic Constraints
+
+```typescript
+// Pattern: Constrain generics to specific Drizzle types
+T extends DrizzleTableWithId
+TDatabase extends DrizzleDatabase  
+TActor extends Actor
+TScopeFilters extends ScopeFilters<T, TActor>
+```
+
+### 3. Type Inference from Drizzle ORM
+
+```typescript
+// Get infer types from table schema
+T["$inferSelect"]; // Table select type
+T["$inferInsert"]; // Table insert type
+
+// Complex query result types
+BuildQueryResult<TSchema, TFields, TSelections>;
+```
+
+### 4. Utility Types Usage
+
+- `Partial<T>` for update operations
+- `Record<string, any>` for flexible object typing
+- `Omit<T, K>` to exclude specific properties
+- `KnownKeysOnly<T, U>` from Drizzle for strict key checking
+
+## Type Safety Rules
+
+1. **Always constrain generics** to specific interfaces
+2. **Avoid `any`** - use specific types or unknown
+3. **Use assertion only when necessary** - prefer type guards
+4. **Export all types** that might be used by consumers
+5. **Use const assertions** for literal types where needed
+
+## Validation Adapter Pattern
+
+The validation system uses **Standard Schema V1** interface for vendor-agnostic
+validation:
+
+```typescript
+interface ValidationAdapter<T extends DrizzleTableWithId> {
+  createInsertSchema: (table: T) => StandardSchemaV1<T["$inferInsert"]>;
+  createUpdateSchema: (
+    table: T,
+  ) => StandardSchemaV1<Partial<T["$inferInsert"]>>;
+  // ... other schema creators
+}
+```
+
+This allows plugging different validation libraries (Zod, Yup, etc.) while
+maintaining type safety.

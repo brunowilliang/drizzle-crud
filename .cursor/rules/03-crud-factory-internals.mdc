@@ -1,0 +1,139 @@
+---
+description: "Deep dive into crud-factory.ts implementation details"
+---
+
+# CRUD Factory Implementation Guide
+
+## Core Factory Function: [src/crud-factory.ts](mdc:src/crud-factory.ts)
+
+The `crudFactory` function is the heart of the library, generating type-safe
+CRUD operations.
+
+### Architecture Overview
+
+```typescript
+crudFactory(db, table, options) → {
+  create, findById, list, update, deleteOne, restore,
+  permanentDelete, bulkCreate, bulkDelete, bulkRestore  
+}
+```
+
+## Key Internal Functions
+
+### 1. Schema Creation (`createSchemas`)
+
+- **Lines 38-72**: Generates validation schemas if validation adapter provided
+- Creates: insertSchema, updateSchema, listSchema, idSchema
+- Uses options to configure list schema (search fields, filters, limits)
+
+### 2. Query Builder Management
+
+- **`getDb(context)`**: Returns context db or fallback to factory db
+- **`getQueryBuilder(context)`**: Gets Drizzle relational query builder for
+  table
+- **`getColumn(key)`**: Safe column access with proper typing
+
+### 3. Filter Application Pipeline
+
+```typescript
+// Order of filter application:
+1. applyFilters()      // User-provided filters  
+2. applySearch()       // Search across configured fields
+3. applyScopeFilters() // Security/tenant filters
+4. applySoftDeleteFilter() // Exclude soft-deleted records
+```
+
+### 4. CRUD Operations Signature Patterns
+
+**Create Operations:**
+
+```typescript
+create(data, context?) → Promise<T['$inferSelect']>
+bulkCreate(data[], context?) → Promise<{success: boolean, count: number}>
+```
+
+**Read Operations:**
+
+```typescript
+findById<TSelections>(id, params?, context?) → Promise<FindOneResult<TSelections> | null>
+list<TSelections>(params, context?) → Promise<{results, page, limit, total}>
+```
+
+**Update/Delete Operations:**
+
+```typescript
+update(id, updates, context?) → Promise<T['$inferSelect']>
+deleteOne(id, context?) → Promise<{success: boolean}>
+```
+
+## Advanced Features Implementation
+
+### Soft Delete Logic
+
+- **Lines 185-202**: Handles soft delete field configuration
+- Supports custom deleted/not-deleted values
+- Automatic value inference (Date() for timestamps, true/false for booleans)
+
+### Scope Filters Security
+
+- **Lines 167-183**: Applies tenant/workspace-level security
+- Each scope filter is a function: `(value, actor) => SQL | undefined`
+- Automatically applied to all operations (create, read, update, delete)
+
+### Validation Hooks
+
+- **Lines 204-221**: Pluggable validation with context awareness
+- Can skip validation via `context.skipValidation`
+- Supports custom validation functions
+
+### Hooks System
+
+```typescript
+hooks: {
+  validate?: (params: {data, context, operation}) => boolean
+  beforeCreate?: (data) => transformedData  
+  beforeUpdate?: (data) => transformedData
+}
+```
+
+## Performance Optimizations
+
+1. **Conditional Query Building**: Only builds WHERE clauses when conditions
+   exist
+2. **Efficient Counting**: Separate optimized count query for pagination
+3. **Type-level Optimizations**: Zero runtime overhead for TypeScript types
+4. **Query Builder Reuse**: Single query builder instance per context
+
+## Error Handling Patterns
+
+- Validation errors thrown with structured JSON
+- Soft delete configuration errors with descriptive messages
+- Missing required context handled gracefully
+- Database errors propagated up the chain
+
+## SQLite-Specific Adaptations
+
+### Table Name Resolution
+
+```typescript
+// SQLite doesn't have table._.name like PostgreSQL
+const schemaEntries = Object.entries(db._.fullSchema);
+const tableEntry = schemaEntries.find(([_, schemaTable]) =>
+  schemaTable === table
+);
+const tableName = tableEntry?.[0] as keyof TDatabase["_"]["fullSchema"];
+```
+
+### Database Differences
+
+- **PostgreSQL**: Uses `result.rowCount` for affected rows
+- **SQLite**: Uses `result.changes` for affected rows
+- **Returning**: PostgreSQL returns arrays, SQLite may return single objects
+- **Null Comparisons**: SQLite requires `isNull()` instead of `eq(column, null)`
+
+### Type Safety Improvements
+
+- **Explicit return types** for create/update methods:
+  `Promise<T['$inferSelect']>`
+- **Type assertions** for proper inference: `result as T['$inferSelect']`
+- **Union type resolution** for database compatibility

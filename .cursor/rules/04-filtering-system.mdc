@@ -1,0 +1,152 @@
+---
+description: "Complete guide to the filtering system implementation"
+---
+
+# Advanced Filtering System Guide
+
+## Filter Implementation: [src/filters.ts](mdc:src/filters.ts)
+
+The filtering system supports complex queries with type safety and security.
+
+## Filter Types & Structure
+
+### Basic Filter Operators
+
+```typescript
+type Filter<T> = {
+  equals?: T; // Direct equality
+  not?: T; // Not equal
+  gt?: T; // Greater than
+  gte?: T; // Greater than or equal
+  lt?: T; // Less than
+  lte?: T; // Less than or equal
+  in?: T[]; // Value in array
+  like?: string; // SQL LIKE (case sensitive)
+  ilike?: string; // SQL ILIKE (case insensitive)
+};
+```
+
+### Complex Filter Structure
+
+```typescript
+FilterParams<T> = {
+  [field in keyof T]?: T[field] | Filter<T[field]>
+  AND?: FilterParams<T>[]  // All conditions must be true
+  OR?: FilterParams<T>[]   // Any condition can be true
+}
+```
+
+## Filter Processing Pipeline
+
+### 1. Entry Point: `filtersToWhere()`
+
+- **Lines 22-30**: Main public API
+- Parses filters and combines with AND logic
+- Returns single SQL condition or undefined
+
+### 2. Core Parser: `parseFilters()`
+
+- **Lines 32-80**: Handles AND/OR logic at top level
+- Recursively processes nested filter groups
+- Validates against allowedFilters list
+
+### 3. Field Parser: `parseFilterGroup()`
+
+- **Lines 82-144**: Processes individual field filters
+- Converts filter objects to SQL conditions
+- Handles direct values vs operator objects
+
+## Filter Examples
+
+### Simple Field Filtering
+
+```typescript
+const filters = {
+  name: "John Doe", // Direct value → eq(column, value)
+  status: { not: "inactive" }, // Operator object → ne(column, value)
+  age: { gte: 18, lt: 65 }, // Multiple operators on same field
+};
+```
+
+### Complex AND/OR Logic
+
+```typescript
+const complexFilters = {
+  AND: [
+    { status: "active" },
+    { role: { in: ["admin", "moderator"] } },
+  ],
+  OR: [
+    { name: { like: "John%" } },
+    { email: { ilike: "%@company.com" } },
+  ],
+};
+```
+
+### Nested Logic
+
+```typescript
+const nestedFilters = {
+  AND: [
+    {
+      OR: [
+        { department: "engineering" },
+        { department: "design" },
+      ],
+    },
+    { status: "active" },
+    { salary: { gte: 50000 } },
+  ],
+};
+```
+
+## Security Features
+
+### 1. AllowedFilters Validation
+
+- Only fields in `allowedFilters` array are processed
+- Prevents SQL injection through field names
+- Unknown fields are silently ignored
+
+### 2. Type Safety
+
+- Filter values must match column types
+- Operators validated at compile time
+- No raw SQL injection possible
+
+### 3. Automatic SQL Escaping
+
+- All values passed through Drizzle's parameter binding
+- Protection against SQL injection attacks
+- Safe handling of special characters
+
+## Integration with CRUD Operations
+
+### In List Operations
+
+```typescript
+const users = createCrud(usersTable, {
+  allowedFilters: ["name", "email", "status"], // Security whitelist
+});
+
+await users.list({
+  filters: { name: { like: "John%" } }, // Only allowed fields work
+});
+```
+
+### Combined with Search & Scope
+
+```typescript
+// Filter application order in CRUD operations:
+1. User filters (from params.filters)
+2. Search filters (from params.search)  
+3. Scope filters (from context.scope)
+4. Soft delete filters (automatic)
+```
+
+## Performance Considerations
+
+1. **Index Usage**: Filters should align with database indexes
+2. **Query Complexity**: Deep nesting can create complex WHERE clauses
+3. **Parameter Binding**: All values use prepared statement parameters
+4. **Condition Optimization**: Empty filter arrays are skipped

@@ -1,0 +1,79 @@
+---
+alwaysApply: true
+description: "Overview and architecture of the drizzle-crud library"
+---
+
+# Drizzle CRUD Library - Project Overview
+
+This is a **TypeScript library** that provides a factory pattern for creating
+type-safe CRUD operations on top of Drizzle ORM with **SQLite** support.
+
+## Core Architecture
+
+The library follows a **factory pattern** with these main components:
+
+- **[src/index.ts](mdc:src/index.ts)** - Main entry point, exports `drizzleCrud`
+  factory function
+- **[src/crud-factory.ts](mdc:src/crud-factory.ts)** - Core CRUD operations
+  implementation
+- **[src/types.ts](mdc:src/types.ts)** - All TypeScript type definitions and
+  interfaces
+- **[src/filters.ts](mdc:src/filters.ts)** - Filter parsing and WHERE clause
+  generation
+- **[src/standard-schema.ts](mdc:src/standard-schema.ts)** - Standard Schema
+  interface for validation
+- **[src/zod.ts](mdc:src/zod.ts)** - Zod validation adapter implementation
+
+## Key Features
+
+1. **Type-Safe CRUD Operations** - Fully typed create, read, update, delete
+   operations
+2. **Soft Delete Support** - Configurable soft deletion with custom field/value
+   mapping
+3. **Advanced Filtering** - Complex filters with AND/OR logic and multiple
+   operators
+4. **Scope Filters** - Multi-tenant/workspace security through scope-based
+   filtering
+5. **Validation Adapters** - Pluggable validation using Standard Schema
+   interface
+6. **Hooks System** - beforeCreate, beforeUpdate, and custom validation hooks
+7. **Pagination & Search** - Built-in pagination with search across configurable
+   fields
+8. **Relations Support** - Full Drizzle relations support with proper TypeScript
+   inference
+
+## Usage Pattern
+
+```typescript
+// Option 1: Local SQLite with Bun
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { Database } from "bun:sqlite";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+const sqlite = new Database("database.db"); // or ':memory:' for in-memory
+const db = drizzle(sqlite, { schema: { users: usersTable } });
+
+// Option 2: Turso DB (remote SQLite)
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+
+const client = createClient({
+   url: "libsql://your-db.turso.io",
+   authToken: "token",
+});
+const db = drizzle(client, { schema: { users: usersTable } });
+
+// 2. Create database factory
+const createCrud = drizzleCrud(db, { validation: zod() });
+
+// 3. Create table-specific CRUD instance
+const users = createCrud(usersTable, {
+   searchFields: ["name", "email"],
+   allowedFilters: ["name", "email", "status"],
+   softDelete: { field: "deletedAt" },
+});
+
+// 4. Use type-safe operations
+const user = await users.create({ name: "John", email: "john@example.com" });
+const list = await users.list({ search: "John", page: 1, limit: 10 });
+```

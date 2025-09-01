@@ -1,0 +1,75 @@
+---
+alwaysApply: true
+---
+
+# Drizzle CRUD - Complete Cursor Rules Index
+
+Este projeto possui **documentação completa** através das seguintes regras do
+Cursor:
+
+## 📋 **ÍNDICE DE REGRAS**
+
+### 🏗️ **Core Architecture**
+
+- **[01-project-overview.mdc](mdc:.cursor/rules/01-project-overview.mdc)** -
+  Visão geral, arquitetura e padrões principais
+- **[02-typescript-patterns.mdc](mdc:.cursor/rules/02-typescript-patterns.mdc)** -
+  Padrões TypeScript avançados e convenções
+
+### 🔧 **Implementation Details**
+
+- **[03-crud-factory-internals.mdc](mdc:.cursor/rules/03-crud-factory-internals.mdc)** -
+  Implementação interna do crud-factory.ts
+- **[04-filtering-system.mdc](mdc:.cursor/rules/04-filtering-system.mdc)** -
+  Sistema de filtros complexos com AND/OR
+- **[05-validation-system.mdc](mdc:.cursor/rules/05-validation-system.mdc)** -
+  Sistema de validação com Standard Schema + Zod
+
+### 🔒 **Advanced Features**
+
+- **[06-soft-delete-and-scoping.mdc](mdc:.cursor/rules/06-soft-delete-and-scoping.mdc)** -
+  Soft delete e scope filters para multi-tenancy
+
+### 📚 **Usage & Extension**
+
+- **[07-usage-and-extension.mdc](mdc:.cursor/rules/07-usage-and-extension.mdc)** -
+  Como usar e estender a biblioteca
+- **[08-testing-and-development.mdc](mdc:.cursor/rules/08-testing-and-development.mdc)** -
+  Testes e guidelines de desenvolvimento
+
+### 🎯 **Master Guide**
+
+- **[99-master-guide.mdc](mdc:.cursor/rules/99-master-guide.mdc)** - Guia
+  completo para usar em outros projetos (SQLite + Turso)
+
+## 🚀 **Quick Navigation**
+
+**Começando?** Leia: `01-project-overview.mdc` → `07-usage-and-extension.mdc`
+
+**Contribuindo?** Leia: `02-typescript-patterns.mdc` →
+`08-testing-and-development.mdc`
+
+**Debugging?** Consulte: `03-crud-factory-internals.mdc` + arquivo específico da
+feature
+
+**Implementando Security?** Foque em: `06-soft-delete-and-scoping.mdc`
+
+## 📖 **Como Usar as Regras**
+
+1. **Automatic Rules**: Aplicadas automaticamente (01-project-overview,
+   00-rules-index)
+2. **Contextual Rules**: Aplicadas conforme arquivos sendo editados
+   (02-typescript-patterns)
+3. **Reference Rules**: Consulta manual conforme necessidade (03-08)
+
+## 🎯 **Cobertura Completa**
+
+✅ Arquitetura e padrões de design\
+✅ Sistema de tipos TypeScript avançado\
+✅ Implementação interna detalhada\
+✅ Filtros complexos e validação\
+✅ Recursos de segurança (soft delete, scoping)\
+✅ Guia de uso e extensão\
+✅ Testes e desenvolvimento
+
+**Todas as funcionalidades do projeto estão documentadas!**

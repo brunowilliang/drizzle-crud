@@ -1,0 +1,310 @@
+---
+description: "Testing patterns and development guidelines for drizzle-crud"
+---
+
+# Testing & Development Guidelines
+
+## Test Structure: [test/](mdc:test/)
+
+### Test Files Overview
+
+- **[test/crud.test.ts](mdc:test/crud.test.ts)** - Integration tests for CRUD
+  operations
+- **[test/types.test.ts](mdc:test/types.test.ts)** - TypeScript type checking
+  and inference tests
+- **[test/advanced.test.ts](mdc:test/advanced.test.ts)** - Advanced features
+  testing (soft delete, scope filters, relations)
+- **[exemples/turso/](mdc:exemples/turso/)** - Real-world Turso DB examples with
+  100k+ records tested
+
+### Testing Stack
+
+- **Bun test** - Native test runner with excellent performance
+- **TypeScript** - Type-level testing with custom `assertType`
+- **SQLite in-memory** - Fast isolated database for each test
+
+## CRUD Operation Testing
+
+### Basic CRUD Tests (crud.test.ts Lines 21-41)
+
+```typescript
+describe("drizzleCrud", () => {
+  beforeEach(() => {
+    // Fresh database for each test
+    const sqlite = new Database(":memory:");
+    db = drizzle(sqlite, { schema: { users: usersTable } });
+
+    // Create table + setup
+    createCrud = drizzleCrud(db);
+  });
+
+  it("should create a user without validation", async () => {
+    const users = createCrud(usersTable);
+
+    const user = await users.create({
+      name: "John Doe",
+      email: "john.doe@example.com",
+    });
+
+    expect(user).toEqual({
+      id: 1, // Always 1 in fresh DB
+      name: "John Doe",
+      email: "john.doe@example.com",
+    });
+  });
+});
+```
+
+### Validation Testing Patterns
+
+```typescript
+// Global validation adapter
+const createCrud = drizzleCrud(db, { validation: zod() });
+
+// Local validation override
+const users = createCrud(usersTable, {
+  validation: zod({
+    insert: () =>
+      z.object({
+        name: z.string().optional(),
+        email: z.email().optional().nullable(),
+      }),
+  }),
+});
+```
+
+### Advanced Query Testing (Lines 134-159)
+
+```typescript
+it("should find by id", async () => {
+  const user = await users.findById(1, {
+    columns: {
+      id: true,
+      name: true,
+      email: false, // Test column selection
+    },
+  });
+
+  expect(user).toEqual({
+    id: 1,
+    name: "John Doe",
+    // email should be excluded
+  });
+});
+```
+
+### Filter Testing (Lines 161-205)
+
+```typescript
+it("should apply filters", async () => {
+  const where = filtersToWhere(usersTable, {
+    OR: [
+      { email: { equals: "john.doe@example.com" } },
+      { email: { equals: "jane.doe@example.com" } },
+    ],
+    AND: [
+      { id: { not: 1337 } },
+      { name: "Johnny" },
+    ],
+  });
+
+  const list = await users.list({ where });
+  // Test complex filter combinations
+});
+```
+
+## Type-Level Testing
+
+### TypeScript Type Testing (types.test.ts)
+
+The project uses **compile-time type testing** to ensure type safety:
+
+```typescript
+import { describe, it } from "bun:test";
+
+// Test that types are correctly inferred
+assertType<
+  QueryOneResult<{
+    columns: { id: true; name: true; email: false };
+  }>
+>(result);
+```
+
+### Query Type Testing (Lines 76-129)
+
+```typescript
+it("should correctly type QueryOneInput for users table", () => {
+  const validInput = {
+    columns: { id: true, name: true, email: false },
+    with: {
+      posts: { columns: { id: true, title: true } },
+    },
+  } as const;
+
+  // Verify type compatibility
+  assertType<QueryOneInput<typeof validInput>>(validInput);
+});
+```
+
+### Filter Type Testing (Lines 274-394)
+
+```typescript
+it("should correctly type FilterParams", () => {
+  const complexFilters: FilterParams<typeof users.$inferSelect> = {
+    OR: [
+      { name: "John Doe", email: { like: "%example.com" } },
+      { id: { in: [1, 2, 3] } },
+    ],
+    AND: [
+      { name: { not: "Jane Doe" } },
+      { email: { ilike: "%@gmail.com" } },
+    ],
+  };
+
+  assertType<FilterParams<typeof users.$inferSelect>>(complexFilters);
+});
+```
+
+## Development Workflows
+
+### Project Scripts ([package.json](mdc:package.json) Line 16)
+
+```json
+{
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  }
+}
+```
+
+### Build Configuration ([tsconfig.json](mdc:tsconfig.json))
+
+```json
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "./dist",
+    "types": ["bun-types"],
+    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "module": "ESNext"
+  },
+  "include": ["src", "test"]
+}
+```
+
+### Code Quality ([biome.json](mdc:biome.json))
+
+- **Biome formatter** with tab indentation
+- **Strict linting rules** with recommended settings
+- **Import organization** automatically enabled
+- **Custom rules** for specific patterns (useStyled, etc.)
+
+## Testing Best Practices
+
+### 1. Database Setup
+
+```typescript
+// Use consistent test database setup with isolation
+beforeEach(() => {
+  const sqlite = new Database(":memory:");
+  db = drizzle(sqlite, { schema: { users: usersTable } });
+
+  // Create tables
+  sqlite.run(`CREATE TABLE users (...)`);
+});
+```
+
+### 2. Test Data Patterns
+
+- **Use consistent test data** across tests
+- **Test edge cases** (empty results, null values)
+- **Validate type inference** with assertType
+- **Test error conditions** (validation failures, access denied)
+
+### 3. Async Testing
+
+```typescript
+// Always use async/await for database operations
+it("should handle async operations", async () => {
+  const result = await users.create(testData);
+  expect(result).toBeDefined();
+});
+```
+
+### 4. Type Testing Strategy
+
+```typescript
+// Test both positive and negative cases
+assertType<ExpectedType>(validValue);
+
+// Test that invalid types are rejected (should cause TS error)
+// @ts-expect-error - This should fail type checking
+assertType<ExpectedType>(invalidValue);
+```
+
+## Development Guidelines
+
+### 1. Adding New Features
+
+- **Start with types** in [src/types.ts](mdc:src/types.ts)
+- **Implement in crud-factory** with full type safety
+- **Add validation support** in validation adapters
+- **Write comprehensive tests** for both runtime and types
+
+### 2. Code Style
+
+- **Use Biome formatting** (tabs, single quotes)
+- **Export all types** that might be used externally
+- **Add JSDoc comments** for complex functions
+- **Follow existing patterns** for consistency
+
+### 3. Type Safety Rules
+
+- **Avoid `any` types** - use `unknown` or specific types
+- **Constrain generics** appropriately
+- **Use type assertions** only when necessary
+- **Prefer type inference** over explicit types
+
+### 4. Testing Requirements
+
+- **Test all CRUD operations** for new features
+- **Include type-level tests** for complex types
+- **Test error conditions** and edge cases
+- **Verify TypeScript inference** works correctly
+
+### 5. Documentation
+
+- **Update relevant rules** when adding features
+- **Include usage examples** in rule files
+- **Document breaking changes** clearly
+- **Maintain type documentation** for complex interfaces
+
+## Debugging Tips
+
+### 1. Type Debugging
+
+```typescript
+// Use type helpers to debug complex types
+type Debug<T> = { [K in keyof T]: T[K] };
+type DebugResult = Debug<QueryOneResult<MyQuery>>;
+```
+
+### 2. Runtime Debugging
+
+- **Use console.log** in test files for debugging
+- **Check generated SQL** with Drizzle's debug mode
+- **Validate filter parsing** with unit tests
+- **Test scope filter behavior** with different actors
+
+### 3. Performance Testing
+
+- **Monitor query complexity** for complex filters
+- **Test with larger datasets** to identify bottlenecks
+- **Profile TypeScript compilation** for complex types
+- **Measure validation overhead** with different adapters

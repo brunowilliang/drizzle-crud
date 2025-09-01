@@ -1,0 +1,288 @@
+---
+description: "Complete guide on how to use and extend the drizzle-crud library"
+---
+
+# Usage & Extension Guide
+
+## Basic Usage Pattern
+
+### 1. Database Setup
+
+```typescript
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { Database } from "bun:sqlite";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+const usersTable = sqliteTable("users", {
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }), // For soft delete
+});
+
+const sqlite = new Database("database.db"); // or ':memory:' for in-memory
+const db = drizzle(sqlite, { schema: { users: usersTable } });
+```
+
+### 2. Create CRUD Factory
+
+```typescript
+import { drizzleCrud, zod } from "drizzle-crud";
+
+const createCrud = drizzleCrud(db, {
+  validation: zod(), // Global validation adapter
+});
+```
+
+### 3. Configure Table CRUD
+
+```typescript
+const users = createCrud(usersTable, {
+  searchFields: ["name", "email"], // Search across these fields
+  allowedFilters: ["name", "email", "status"], // Security whitelist
+  defaultLimit: 20, // Default page size
+  maxLimit: 100, // Maximum page size
+  softDelete: { field: "deletedAt" }, // Enable soft delete
+
+  hooks: {
+    beforeCreate: (data) => ({
+      ...data,
+      createdAt: new Date(),
+    }),
+    beforeUpdate: (data) => ({
+      ...data,
+      updatedAt: new Date(),
+    }),
+  },
+});
+```
+
+### 4. Use CRUD Operations
+
+```typescript
+// Create
+const user = await users.create({
+  name: "John Doe",
+  email: "john@example.com",
+});
+
+// Find by ID with relations
+const userWithPosts = await users.findById(1, {
+  with: {
+    posts: {
+      columns: { id: true, title: true },
+    },
+  },
+});
+
+// List with filtering, search, pagination
+const results = await users.list({
+  search: "john",
+  filters: {
+    status: "active",
+    createdAt: { gte: new Date("2024-01-01") },
+  },
+  orderBy: [{ field: "createdAt", direction: "desc" }],
+  page: 1,
+  limit: 10,
+});
+
+// Update
+const updated = await users.update(1, { name: "John Smith" });
+
+// Soft delete
+await users.deleteOne(1); // Sets deletedAt = new Date()
+
+// Restore
+await users.restore(1); // Sets deletedAt = null
+
+// Hard delete
+await users.permanentDelete(1); // Actual DELETE
+```
+
+## Advanced Configuration
+
+### Multi-Tenant Setup
+
+```typescript
+const documents = createCrud(documentsTable, {
+  scopeFilters: {
+    workspaceId: (workspaceId, actor) => {
+      // Enforce tenant isolation
+      if (actor.properties.workspaceId !== workspaceId) {
+        throw new Error("Access denied to workspace");
+      }
+      return eq(documentsTable.workspaceId, workspaceId);
+    },
+  },
+});
+
+// Usage with context
+const context = {
+  scope: { workspaceId: "workspace-123" },
+  actor: {
+    type: "user",
+    properties: { workspaceId: "workspace-123", role: "admin" },
+  },
+};
+
+await documents.list({}, context);
+```
+
+### Custom Validation
+
+```typescript
+import { z } from "zod";
+
+const users = createCrud(usersTable, {
+  validation: zod({
+    insert: () =>
+      z.object({
+        name: z.string().min(1).max(100),
+        email: z.string().email(),
+        age: z.number().int().min(13).optional(),
+      }),
+
+    update: () =>
+      z.object({
+        name: z.string().min(1).max(100).optional(),
+        email: z.string().email().optional(),
+      }).refine((data) => Object.keys(data).length > 0, {
+        message: "At least one field must be provided",
+      }),
+  }),
+});
+```
+
+## Extension Patterns
+
+### 1. Custom Validation Adapter
+
+```typescript
+import type { ValidationAdapter } from "drizzle-crud";
+
+// Create custom adapter for another validation library
+function customValidator(): ValidationAdapter {
+  return {
+    createInsertSchema: (table) => {
+      // Return StandardSchemaV1 compatible schema
+      return {
+        "~standard": {
+          version: 1,
+          vendor: "custom-lib",
+          validate: async (value) => {
+            // Custom validation logic
+            return { value: validatedValue };
+          },
+        },
+      };
+    },
+    // ... other schema creators
+  };
+}
+```
+
+### 2. Custom CRUD Extensions
+
+```typescript
+function createExtendedCrud(db, table, options) {
+  const baseCrud = crudFactory(db, table, options);
+
+  return {
+    ...baseCrud,
+
+    // Add custom methods
+    findByEmail: async (email) => {
+      return baseCrud.list({
+        filters: { email },
+        limit: 1,
+      }).then((result) => result.results[0] || null);
+    },
+
+    // Override existing methods
+    create: async (data, context) => {
+      // Add custom logic before/after
+      const enrichedData = { ...data, slug: generateSlug(data.name) };
+      return baseCrud.create(enrichedData, context);
+    },
+  };
+}
+```
+
+### 3. Plugin System
+
+```typescript
+type CrudPlugin<T extends DrizzleTableWithId> = {
+  beforeCreate?: (data: T["$inferInsert"]) => T["$inferInsert"];
+  afterCreate?: (result: T["$inferSelect"]) => T["$inferSelect"];
+  // ... other hooks
+};
+
+function withPlugins<T extends DrizzleTableWithId>(
+  crud: ReturnType<typeof crudFactory>,
+  plugins: CrudPlugin<T>[],
+) {
+  return {
+    ...crud,
+    create: async (data, context) => {
+      let processedData = data;
+
+      // Apply beforeCreate plugins
+      for (const plugin of plugins) {
+        if (plugin.beforeCreate) {
+          processedData = plugin.beforeCreate(processedData);
+        }
+      }
+
+      let result = await crud.create(processedData, context);
+
+      // Apply afterCreate plugins
+      for (const plugin of plugins) {
+        if (plugin.afterCreate) {
+          result = plugin.afterCreate(result);
+        }
+      }
+
+      return result;
+    },
+  };
+}
+```
+
+## Best Practices
+
+### 1. Security
+
+- **Always use allowedFilters** to whitelist filterable fields
+- **Configure scope filters** for multi-tenant applications
+- **Validate actor permissions** in scope filter functions
+- **Use soft delete** for audit trails and compliance
+
+### 2. Performance
+
+- **Index scope filter fields** for optimal query performance
+- **Use reasonable page limits** (default: 20, max: 100)
+- **Consider search field indexing** for text search performance
+- **Optimize filter combinations** based on query patterns
+
+### 3. Type Safety
+
+- **Export and reuse types** from the library
+- **Constrain generics properly** in custom extensions
+- **Use const assertions** for literal types in configurations
+- **Leverage TypeScript inference** rather than explicit typing
+
+### 4. Error Handling
+
+- **Catch validation errors** and provide user-friendly messages
+- **Handle scope filter access denials** gracefully
+- **Log security violations** for monitoring
+- **Provide fallback behavior** for optional features
+
+### 5. Testing
+
+- **Test with different actor contexts** for scope filters
+- **Verify soft delete behavior** in all CRUD operations
+- **Test validation edge cases** with invalid data
+- **Mock database for unit tests** using the context parameter
