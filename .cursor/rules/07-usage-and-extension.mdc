@@ -41,8 +41,8 @@ const createCrud = drizzleCrud(db, {
 const users = createCrud(usersTable, {
   searchFields: ["name", "email"], // Search across these fields
   allowedFilters: ["name", "email", "status"], // Security whitelist
-  defaultLimit: 20, // Default page size
-  maxLimit: 100, // Maximum page size
+  defaultItemsPerPage: 20, // Default items per page
+  maxItemsPerPage: 100, // Maximum items per page
   softDelete: { field: "deletedAt" }, // Enable soft delete
 
   hooks: {
@@ -85,8 +85,14 @@ const results = await users.list({
   },
   orderBy: [{ field: "createdAt", direction: "desc" }],
   page: 1,
-  limit: 10,
+  perPage: 10,
 });
+
+// Rich pagination response
+console.log(results.totalItems); // Total records
+console.log(results.totalPages); // Total pages
+console.log(results.hasNextPage); // Boolean for UI
+console.log(results.hasPreviousPage); // Boolean for UI
 
 // Update
 const updated = await users.update(1, { name: "John Smith" });
@@ -196,7 +202,7 @@ function createExtendedCrud(db, table, options) {
     findByEmail: async (email) => {
       return baseCrud.list({
         filters: { email },
-        limit: 1,
+        perPage: 1,
       }).then((result) => result.results[0] || null);
     },
 
@@ -262,7 +268,7 @@ function withPlugins<T extends DrizzleTableWithId>(
 ### 2. Performance
 
 - **Index scope filter fields** for optimal query performance
-- **Use reasonable page limits** (default: 20, max: 100)
+- **Use reasonable page limits** (defaultItemsPerPage: 20, maxItemsPerPage: 100)
 - **Consider search field indexing** for text search performance
 - **Optimize filter combinations** based on query patterns
 

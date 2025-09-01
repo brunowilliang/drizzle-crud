@@ -73,15 +73,15 @@ export type CrudOptions<
 > = {
 	searchFields?: (keyof T['$inferSelect'])[];
 	/**
-	 * The default limit of items returned.
+	 * The default number of items per page.
 	 * @default 20
 	 */
-	defaultLimit?: number;
+	defaultItemsPerPage?: number;
 	/**
-	 * The max limit of items returned.
+	 * The maximum number of items per page.
 	 * @default 100
 	 */
-	maxLimit?: number;
+	maxItemsPerPage?: number;
 	/**
 	 * The allowed fields to be used in the filters parameter.
 	 * e.g., ['name', 'email']
@@ -119,7 +119,7 @@ export type CrudOptions<
 
 export type ListParams<T extends DrizzleTableWithId> = {
 	page?: number;
-	limit?: number;
+	perPage?: number;
 	search?: string;
 	filters?: FilterParams<T['$inferSelect']>;
 	orderBy?: {
@@ -172,7 +172,16 @@ export type OperationContext<
 
 export type PaginationParams = {
 	page?: number;
-	limit?: number;
+	perPage?: number;
+};
+
+export type PaginationResult = {
+	page: number;
+	perPage: number;
+	hasNextPage: boolean;
+	hasPreviousPage: boolean;
+	totalPages: number;
+	totalItems: number;
 };
 
 export type OrderByParams<T extends DrizzleTable> = {
@@ -230,15 +239,15 @@ export interface ValidationAdapter<
 }
 
 export interface PaginationOptions {
-	defaultLimit: number;
-	maxLimit: number;
+	defaultItemsPerPage: number;
+	maxItemsPerPage: number;
 }
 
 export interface ListSchemaOptions<T extends DrizzleTable> {
 	searchFields?: (keyof T['$inferSelect'])[];
 	allowedFilters?: (keyof T['$inferSelect'])[];
 	allowedOrderFields?: (keyof T['$inferSelect'])[];
-	defaultLimit?: number;
-	maxLimit?: number;
+	defaultItemsPerPage?: number;
+	maxItemsPerPage?: number;
 	allowIncludeDeleted?: boolean;
 }

@@ -71,9 +71,11 @@ const users = createCrud(usersTable, {
    searchFields: ["name", "email"],
    allowedFilters: ["name", "email", "status"],
    softDelete: { field: "deletedAt" },
+   defaultItemsPerPage: 20,
+   maxItemsPerPage: 100,
 });
 
 // 4. Use type-safe operations
 const user = await users.create({ name: "John", email: "john@example.com" });
-const list = await users.list({ search: "John", page: 1, limit: 10 });
+const list = await users.list({ search: "John", page: 1, perPage: 10 });
 ```

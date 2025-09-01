@@ -5,10 +5,10 @@ async function testBulkDelete() {
 
 	// First, get all users to delete
 	const allUsers = await usersCrud.list({
-		limit: 2000,
+		perPage: 2000,
 	});
 
-	console.log(`📊 Found ${allUsers.total} users to delete`);
+	console.log(`📊 Found ${allUsers.totalItems} users to delete`);
 
 	if (allUsers.results.length === 0) {
 		console.log('❌ No users found to delete');

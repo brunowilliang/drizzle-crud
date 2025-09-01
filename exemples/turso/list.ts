@@ -4,19 +4,17 @@ async function testList() {
 	console.log('📋 Testing list...');
 
 	// List users with pagination
-	const result = await usersCrud.list({
-		page: 1,
-		limit: 10,
-	});
+	const result = await usersCrud.list({});
 
 	console.log('✅ List result:', {
-		total: result.total,
+		totalItems: result.totalItems,
 		page: result.page,
-		limit: result.limit,
+		perPage: result.perPage,
+		totalPages: result.totalPages,
+		hasNextPage: result.hasNextPage,
+		hasPreviousPage: result.hasPreviousPage,
 		resultsCount: result.results.length,
 	});
-
-	console.log('✅ First user:', result.results[0]);
 
 	return result;
 }

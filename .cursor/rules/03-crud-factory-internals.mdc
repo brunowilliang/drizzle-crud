@@ -56,7 +56,9 @@ bulkCreate(data[], context?) → Promise<{success: boolean, count: number}>
 
 ```typescript
 findById<TSelections>(id, params?, context?) → Promise<FindOneResult<TSelections> | null>
-list<TSelections>(params, context?) → Promise<{results, page, limit, total}>
+list<TSelections>(params, context?) → Promise<{
+  results, page, perPage, totalItems, totalPages, hasNextPage, hasPreviousPage
+}>
 ```
 
 **Update/Delete Operations:**

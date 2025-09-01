@@ -78,18 +78,13 @@ describe('drizzleCrud', () => {
 				}),
 			pagination(options) {
 				return z.object({
-					page: z
+					page: z.number().int().positive().optional().default(1),
+					perPage: z
 						.number()
 						.int()
 						.positive()
 						.optional()
-						.default(options.defaultLimit ?? 10),
-					limit: z
-						.number()
-						.int()
-						.positive()
-						.optional()
-						.default(options.maxLimit ?? 100),
+						.default(options.defaultItemsPerPage ?? 10),
 				});
 			},
 		});
@@ -214,7 +209,9 @@ describe('drizzleCrud', () => {
 
 	it('should accept filters', async () => {
 		const crudWithValidation = drizzleCrud(db, { validation: zod() });
-		const users = crudWithValidation(usersTable);
+		const users = crudWithValidation(usersTable, {
+			allowedFilters: ['id', 'name', 'email'], // ✅ Permite filtros
+		});
 
 		// Create a user first
 		await users.create({

@@ -15,6 +15,7 @@ const db = drizzle(client, { schema: { users } });
 export const createCrud = drizzleCrud(db, { validation: zod() });
 
 export const usersCrud = createCrud(users, {
-	maxLimit: 2000,
+	defaultItemsPerPage: 50,
+	// maxItemsPerPage: 30,
 	softDelete: { field: 'deletedAt' },
 });

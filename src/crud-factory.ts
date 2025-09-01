@@ -58,8 +58,8 @@ function createSchemas<
 	const listOptions: ListSchemaOptions<T> = {
 		searchFields: options.searchFields,
 		allowedFilters: options.allowedFilters,
-		defaultLimit: options.defaultLimit,
-		maxLimit: options.maxLimit,
+		defaultItemsPerPage: options.defaultItemsPerPage,
+		maxItemsPerPage: options.maxItemsPerPage,
 		allowIncludeDeleted: !!options.softDelete,
 	};
 
@@ -83,8 +83,8 @@ export function crudFactory<
 ) {
 	const {
 		searchFields = [],
-		defaultLimit = 20,
-		maxLimit = 100,
+		defaultItemsPerPage = 20,
+		maxItemsPerPage = 100,
 		allowedFilters = [],
 		softDelete,
 		scopeFilters = {} as TScopeFilters,
@@ -309,7 +309,10 @@ export function crudFactory<
 
 		const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-		const limit = Math.min(validatedParams.limit || defaultLimit, maxLimit);
+		const limit = Math.min(
+			validatedParams.perPage || defaultItemsPerPage,
+			maxItemsPerPage,
+		);
 		const page = validatedParams.page || 1;
 		const offset = (page - 1) * limit;
 
@@ -340,16 +343,26 @@ export function crudFactory<
 
 		const total = totalResult[0].count as number;
 
+		const totalPages = Math.ceil(total / limit);
+		const hasNextPage = page * limit < total;
+		const hasPreviousPage = page > 1;
+
 		return {
 			results: data,
 			page,
-			limit,
-			total,
+			perPage: limit,
+			hasNextPage,
+			hasPreviousPage,
+			totalPages,
+			totalItems: total,
 		} as {
 			results: ListResult<TSelections>;
 			page: number;
-			limit: number;
-			total: number;
+			perPage: number;
+			hasNextPage: boolean;
+			hasPreviousPage: boolean;
+			totalPages: number;
+			totalItems: number;
 		};
 	};
 

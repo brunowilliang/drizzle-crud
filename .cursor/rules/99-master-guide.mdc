@@ -66,8 +66,8 @@ const users = createCrud(usersTable, {
   searchFields: ["name", "email"],
   allowedFilters: ["name", "email", "role", "workspaceId"],
   softDelete: { field: "deletedAt" },
-  defaultLimit: 20,
-  maxLimit: 100,
+  defaultItemsPerPage: 20,
+  maxItemsPerPage: 100,
 });
 ```
 
@@ -103,8 +103,14 @@ const usersList = await users.list({
   search: "bruno",
   filters: { role: "admin" },
   page: 1,
-  limit: 10,
+  perPage: 10,
 });
+
+// Rich pagination response automatically included:
+console.log(usersList.totalItems); // Total records
+console.log(usersList.totalPages); // Calculated pages
+console.log(usersList.hasNextPage); // Boolean for UI
+console.log(usersList.hasPreviousPage); // Boolean for UI
 ```
 
 ### Bulk Operations

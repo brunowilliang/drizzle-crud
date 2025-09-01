@@ -167,7 +167,7 @@ it("should correctly type FilterParams", () => {
 
 ## Development Workflows
 
-### Project Scripts ([package.json](mdc:package.json) Line 16)
+### Project Scripts ([package.json](mdc:package.json) Lines 16-20)
 
 ```json
 {
