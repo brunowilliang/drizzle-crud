@@ -1,249 +1,158 @@
-import { Database } from 'bun:sqlite';
-import { beforeEach, describe, expect, it } from 'bun:test';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { z } from 'zod/v4';
-import { drizzleCrud, filtersToWhere } from '../src/index.ts';
-import { zod } from '../src/zod.ts';
+import { describe, expect, test } from 'bun:test';
+import { eq } from 'drizzle-orm';
+import { db } from '../exemples/client';
+import { users } from '../exemples/schema';
+import { drizzleCrud } from '../src/index';
+import { zod } from '../src/zod';
 
-const usersTable = sqliteTable('users', {
-	id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
-	name: text('name'),
-	email: text('email'),
+// Initialize CRUD factory with Zod validation
+const crud = drizzleCrud(db, { validation: zod() });
+
+// Create CRUD instances
+const usersCrud = crud(users, {
+	searchFields: ['name', 'email'],
+	allowedFilters: ['role', 'status'],
+	softDelete: {
+		field: 'deletedAt',
+		deletedValue: new Date(),
+		notDeletedValue: null,
+	},
+	defaultPageSize: 10,
+	maxPageSize: 50,
 });
 
-// Global variables for isolated test setup
-let db: any;
-let createCrud: any;
+describe('Basic CRUD Operations', () => {
+	let userId: number;
 
-describe('drizzleCrud', () => {
-	beforeEach(() => {
-		// Fresh database for each test
-		const sqlite = new Database(':memory:');
-		db = drizzle(sqlite, { schema: { users: usersTable } });
-
-		// Create table
-		sqlite.run(`
-			CREATE TABLE users (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				name TEXT,
-				email TEXT
-			)
-		`);
-
-		createCrud = drizzleCrud(db);
-	});
-	it('should create a crud instance', () => {
-		expect(createCrud).toBeDefined();
+	// Clean up before all tests
+	test('clean database', async () => {
+		await db.delete(users);
+		expect(true).toBe(true);
 	});
 
-	it('should create a user without validation', async () => {
-		const users = createCrud(usersTable);
+	describe('Users CRUD', () => {
+		test('create user', async () => {
+			const user = await usersCrud.create({
+				email: 'bruno@test.com',
+				name: 'Bruno Garcia',
+				role: 'admin',
+				status: 'active',
+				bio: 'Senior developer',
+			});
 
-		const user = await users.create({
-			name: 'John Doe',
-			email: 'john.doe@example.com',
+			expect(user).toBeDefined();
+			expect(user.email).toBe('bruno@test.com');
+			expect(user.name).toBe('Bruno Garcia');
+			expect(user.role).toBe('admin');
+			expect(user.deletedAt).toBeNull();
+			userId = user.id;
 		});
 
-		expect(user).toEqual({
-			id: 1,
-			name: 'John Doe',
-			email: 'john.doe@example.com',
-		});
-	});
-
-	it('should validate with zod', async () => {
-		const validation = zod();
-		const crudWithValidation = drizzleCrud(db, { validation });
-		const users = crudWithValidation(usersTable);
-
-		const user = await users.create({
-			name: 'John Doe',
-			email: 'john.doe@example.com',
+		test('find user by id', async () => {
+			const user = await usersCrud.findOne({ id: userId });
+			expect(user).toBeDefined();
+			expect(user?.id).toBe(userId);
+			expect(user?.email).toBe('bruno@test.com');
 		});
 
-		expect(user).toEqual({
-			id: 1,
-			name: 'John Doe',
-			email: 'john.doe@example.com',
-		});
-	});
-
-	it('should validate with custom zod schemas', async () => {
-		const validation = zod({
-			insert: () =>
-				z.object({
-					name: z.string(),
-					email: z.email(),
-				}),
-			pagination(options) {
-				return z.object({
-					page: z.number().int().positive().optional().default(1),
-					perPage: z
-						.number()
-						.int()
-						.positive()
-						.optional()
-						.default(options.defaultItemsPerPage ?? 10),
-				});
-			},
+		test('find user by email', async () => {
+			const user = await usersCrud.findOne({ email: 'bruno@test.com' });
+			expect(user).toBeDefined();
+			expect(user?.id).toBe(userId);
+			expect(user?.name).toBe('Bruno Garcia');
 		});
 
-		const crudWithValidation = drizzleCrud(db, { validation });
-		const users = crudWithValidation(usersTable);
+		test('update user', async () => {
+			const updated = await usersCrud.update(userId, {
+				bio: 'Super Senior Developer',
+				status: 'inactive',
+			});
 
-		const user = await users.create({
-			name: 'John Doe',
-			email: 'john.doe@example.com',
+			expect(updated).toBeDefined();
+			expect(updated.bio).toBe('Super Senior Developer');
+			expect(updated.status).toBe('inactive');
 		});
 
-		expect(user).toEqual({
-			id: 1,
-			name: 'John Doe',
-			email: 'john.doe@example.com',
-		});
-	});
+		test('list users with pagination', async () => {
+			// Create more users for pagination test
+			await usersCrud.create({
+				email: 'user2@test.com',
+				name: 'User Two',
+				role: 'editor',
+			});
 
-	it('should validate with custom local zod schemas', async () => {
-		const crudWithValidation = drizzleCrud(db, { validation: zod() });
-		const users = crudWithValidation(usersTable, {
-			validation: zod({
-				insert: () =>
-					z.object({
-						name: z.string().optional(),
-						email: z.email().optional().nullable(),
-					}),
-			}),
-		});
+			await usersCrud.create({
+				email: 'user3@test.com',
+				name: 'User Three',
+				role: 'viewer',
+			});
 
-		const user = await users.create({
-			name: 'John Doe',
-			email: 'john.doe@example.com',
-		});
+			const result = await usersCrud.list({
+				page: 1,
+				perPage: 2,
+			});
 
-		expect(user).toEqual({
-			id: 1,
-			name: 'John Doe',
-			email: 'john.doe@example.com',
-		});
-	});
-
-	it('should find by id', async () => {
-		const crudWithValidation = drizzleCrud(db, { validation: zod() });
-		const users = crudWithValidation(usersTable);
-
-		// First create a user to find
-		await users.create({
-			name: 'John Doe',
-			email: 'john.doe@example.com',
+			expect(result.results).toHaveLength(2);
+			expect(result.page).toBe(1);
+			expect(result.perPage).toBe(2);
+			expect(result.totalItems).toBe(3);
+			expect(result.totalPages).toBe(2);
+			expect(result.hasNextPage).toBe(true);
+			expect(result.hasPreviousPage).toBe(false);
 		});
 
-		const user = await users.findById(1, {
-			columns: {
-				id: true,
-				name: true,
-				email: false,
-			},
+		test('search users', async () => {
+			const result = await usersCrud.list({
+				search: 'Bruno',
+				page: 1,
+				perPage: 10,
+			});
+
+			expect(result.results).toHaveLength(1);
+			expect(result.results[0].name).toBe('Bruno Garcia');
 		});
 
-		if (user === null) {
-			throw new Error('User not found');
-		}
-
-		console.log(user);
-
-		expect(user).toEqual({
-			id: 1,
-			name: 'John Doe',
-		});
-	});
-
-	it('should apply filters', async () => {
-		const crudWithValidation = drizzleCrud(db, { validation: zod() });
-		const users = crudWithValidation(usersTable);
-
-		// Create a user first
-		await users.create({
-			name: 'Johnny',
-			email: 'john.doe@example.com',
-		});
-
-		const where = filtersToWhere(usersTable, {
-			OR: [
-				{
-					email: {
-						equals: 'john.doe@example.com',
-					},
+		test('filter users', async () => {
+			const result = await usersCrud.list({
+				filters: {
+					role: 'admin',
 				},
-				{
-					email: {
-						equals: 'jane.doe@example.com',
-					},
-				},
-			],
-			AND: [
-				{
-					id: {
-						not: 1337,
-					},
-				},
-				{
-					name: 'Johnny',
-				},
-			],
+			});
+
+			expect(result.results).toHaveLength(1);
+			expect(result.results[0].role).toBe('admin');
 		});
 
-		const list = await users.list({
-			columns: {
-				id: true,
-			},
-			where,
+		test('soft delete user', async () => {
+			const secondUserId = (
+				await db.select().from(users).where(eq(users.email, 'user2@test.com'))
+			)[0].id;
+
+			await usersCrud.deleteOne(secondUserId);
+
+			// Should not find deleted user
+			const deletedUser = await usersCrud.findOne({ id: secondUserId });
+			expect(deletedUser).toBeNull();
+
+			// Should find with includeDeleted
+			const withDeleted = await usersCrud.findOne(
+				{ id: secondUserId },
+				{ includeDeleted: true },
+			);
+			expect(withDeleted).toBeDefined();
+			expect(withDeleted?.deletedAt).not.toBeNull();
 		});
 
-		expect(list.results).toEqual([
-			{
-				id: 1,
-			},
-		]);
-	});
+		test('restore soft deleted user', async () => {
+			const secondUserId = (
+				await db.select().from(users).where(eq(users.email, 'user2@test.com'))
+			)[0].id;
 
-	it('should accept filters', async () => {
-		const crudWithValidation = drizzleCrud(db, { validation: zod() });
-		const users = crudWithValidation(usersTable, {
-			allowedFilters: ['id', 'name', 'email'], // ✅ Permite filtros
-		});
+			await usersCrud.restore(secondUserId);
 
-		// Create a user first
-		await users.create({
-			name: 'John Doe',
-			email: 'john.doe@example.com',
-		});
-
-		const list = await users.list({
-			columns: {
-				id: true,
-				name: true,
-			},
-			filters: {
-				id: {
-					equals: 1,
-				},
-				OR: [
-					{
-						email: {
-							equals: 'john.doe@example.com',
-						},
-					},
-					{
-						name: 'Johnny',
-					},
-				],
-			},
-		});
-
-		expect(list.results[0]).toEqual({
-			id: 1,
-			name: 'John Doe',
+			const restoredUser = await usersCrud.findOne({ id: secondUserId });
+			expect(restoredUser).toBeDefined();
+			expect(restoredUser?.deletedAt).toBeNull();
 		});
 	});
 });

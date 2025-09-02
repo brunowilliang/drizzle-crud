@@ -73,6 +73,15 @@ export function parseFilters<T extends DrizzleTableWithId>(
 			}
 		}
 
+		// Also parse any other filters alongside AND/OR
+		const otherFilters = { ...filters };
+		delete otherFilters.AND;
+		delete otherFilters.OR;
+
+		if (Object.keys(otherFilters).length > 0) {
+			conditions.push(...parseFilterGroup(table, otherFilters, allowedFilters));
+		}
+
 		return conditions;
 	}
 
@@ -87,9 +96,15 @@ export function parseFilterGroup<T extends DrizzleTableWithId>(
 	const conditions: SQL[] = [];
 
 	Object.entries(filters).forEach(([key, filterValue]) => {
+		// Skip if filter value is undefined
+		if (filterValue === undefined) {
+			return;
+		}
+
+		// If allowedFilters is specified and not empty, check if key is allowed
 		if (
-			!allowedFilters.includes(key as keyof T['$inferSelect']) ||
-			filterValue === undefined
+			allowedFilters.length > 0 &&
+			!allowedFilters.includes(key as keyof T['$inferSelect'])
 		) {
 			return;
 		}

@@ -92,7 +92,7 @@ export function zod<T extends DrizzleTableWithId = DrizzleTableWithId>(
 // ================================
 
 export function createDefaultPaginationSchema(options: PaginationOptions) {
-	const { defaultItemsPerPage = 20, maxItemsPerPage = 100 } = options;
+	const { defaultPageSize = 20, maxPageSize = 100 } = options;
 
 	return z.object({
 		page: z.number().int().positive().optional().default(1),
@@ -100,9 +100,9 @@ export function createDefaultPaginationSchema(options: PaginationOptions) {
 			.number()
 			.int()
 			.positive()
-			.max(maxItemsPerPage)
+			.max(maxPageSize)
 			.optional()
-			.default(defaultItemsPerPage),
+			.default(defaultPageSize),
 	});
 }
 
@@ -116,7 +116,7 @@ export function createDefaultIdSchema<T extends DrizzleTableWithId>(table: T) {
 	}
 
 	if (idColumn.dataType === 'uuid') {
-		return z.string().uuid();
+		return z.uuid();
 	}
 
 	// Default to string for other types (text, varchar, etc.)
@@ -154,15 +154,13 @@ export function createDefaultFilterSchema<T extends DrizzleTable>(
 		),
 	);
 
-	return z
-		.union([
-			singleFilterSchema,
-			z.object({
-				AND: z.array(singleFilterSchema).optional(),
-				OR: z.array(singleFilterSchema).optional(),
-			}),
-		])
-		.optional();
+	// Create a schema that allows AND/OR with the single filter schema
+	const filterWithLogicalOperators = singleFilterSchema.extend({
+		AND: z.array(singleFilterSchema).optional(),
+		OR: z.array(singleFilterSchema).optional(),
+	});
+
+	return filterWithLogicalOperators.optional();
 }
 
 export function createDefaultOrderBySchema<T extends DrizzleTable>(
@@ -190,14 +188,14 @@ export function createDefaultListSchema<T extends DrizzleTable>(
 		searchFields,
 		allowedFilters,
 		allowedOrderFields,
-		defaultItemsPerPage = 20,
-		maxItemsPerPage = 100,
+		defaultPageSize = 20,
+		maxPageSize = 100,
 		allowIncludeDeleted = false,
 	} = options;
 
 	const paginationSchema = createDefaultPaginationSchema({
-		defaultItemsPerPage,
-		maxItemsPerPage,
+		defaultPageSize,
+		maxPageSize,
 	});
 	const orderBySchema = createDefaultOrderBySchema(table, allowedOrderFields);
 	const filterSchema = createDefaultFilterSchema(allowedFilters);

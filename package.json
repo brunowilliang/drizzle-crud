@@ -2,20 +2,22 @@
   "name": "drizzle-crud",
   "version": "0.1.4",
   "type": "module",
-  "license": "Apache-2.0",
-  "author": "Eelco Wiersma <eelco@appulse.nl>",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/saas-js/saas-js.git",
     "directory": "packages/drizzle-crud"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "test": "bun test",
-    "test:watch": "bun test --watch"
+    "test:watch": "bun test --watch",
+    "db:push": "drizzle-kit push --config=exemples/drizzle.config.ts",
+    "db:pull": "drizzle-kit pull --config=exemples/drizzle.config.ts",
+    "db:studio": "drizzle-kit studio --config=exemples/drizzle.config.ts",
+    "db:generate": "drizzle-kit generate --config=exemples/drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=exemples/drizzle.config.ts"
   },
   "exports": {
     ".": {

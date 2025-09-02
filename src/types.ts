@@ -3,12 +3,11 @@ import type {
 	Table as DrizzleTable,
 	SQL,
 } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import type { LibSQLDatabase } from 'drizzle-orm/libsql';
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import type { StandardSchemaV1 } from './standard-schema.ts';
 
-export type DrizzleDatabase = BunSQLiteDatabase<any> | LibSQLDatabase<any>;
+export type DrizzleDatabase = BaseSQLiteDatabase<any, any, any, any>;
 
 export type { DrizzleTable, DrizzleColumn };
 
@@ -38,18 +37,13 @@ export type ColumnsSelection<T extends DrizzleTableWithId> = Partial<
 	Record<keyof T['$inferSelect'], boolean>
 >;
 
-type WithRelations<T extends DrizzleTableWithId> = Record<
-	string,
-	true | { columns?: ColumnsSelection<T>; with?: WithRelations<T> }
->;
-
 export type SoftDeleteConfig<T extends DrizzleTable> = {
 	field: keyof T['$inferSelect']; // e.g., 'deletedAt' or 'isDeleted'
 	deletedValue?: any; // What to set when soft deleting (defaults to new Date() for timestamps, true for booleans)
 	notDeletedValue?: any; // What represents "not deleted" (defaults to null for timestamps, false for booleans)
 };
 
-export type DrizzleCrudOptions<TDatabase extends DrizzleDatabase> = {
+export type DrizzleCrudOptions = {
 	validation?: ValidationAdapter;
 };
 
@@ -73,15 +67,15 @@ export type CrudOptions<
 > = {
 	searchFields?: (keyof T['$inferSelect'])[];
 	/**
-	 * The default number of items per page.
+	 * The default page size (items per page).
 	 * @default 20
 	 */
-	defaultItemsPerPage?: number;
+	defaultPageSize?: number;
 	/**
-	 * The maximum number of items per page.
+	 * The maximum page size allowed.
 	 * @default 100
 	 */
-	maxItemsPerPage?: number;
+	maxPageSize?: number;
 	/**
 	 * The allowed fields to be used in the filters parameter.
 	 * e.g., ['name', 'email']
@@ -175,13 +169,14 @@ export type PaginationParams = {
 	perPage?: number;
 };
 
-export type PaginationResult = {
-	page: number;
-	perPage: number;
+export type PaginatedResponse<T> = {
 	hasNextPage: boolean;
 	hasPreviousPage: boolean;
-	totalPages: number;
+	page: number;
+	perPage: number;
+	results: T[];
 	totalItems: number;
+	totalPages: number;
 };
 
 export type OrderByParams<T extends DrizzleTable> = {
@@ -239,15 +234,15 @@ export interface ValidationAdapter<
 }
 
 export interface PaginationOptions {
-	defaultItemsPerPage: number;
-	maxItemsPerPage: number;
+	defaultPageSize: number;
+	maxPageSize: number;
 }
 
 export interface ListSchemaOptions<T extends DrizzleTable> {
 	searchFields?: (keyof T['$inferSelect'])[];
 	allowedFilters?: (keyof T['$inferSelect'])[];
 	allowedOrderFields?: (keyof T['$inferSelect'])[];
-	defaultItemsPerPage?: number;
-	maxItemsPerPage?: number;
+	defaultPageSize?: number;
+	maxPageSize?: number;
 	allowIncludeDeleted?: boolean;
 }

@@ -13,7 +13,7 @@ export type * from './types.ts';
 
 export function drizzleCrud<TDatabase extends DrizzleDatabase>(
 	db: TDatabase,
-	options: DrizzleCrudOptions<TDatabase> = {},
+	options: DrizzleCrudOptions = {},
 ) {
 	return function createCrud<
 		T extends DrizzleTableWithId,
@@ -23,12 +23,18 @@ export function drizzleCrud<TDatabase extends DrizzleDatabase>(
 		table: T,
 		crudOptions: CrudOptions<TDatabase, T, TActor, TScopeFilters> = {},
 	) {
+		if (!table) {
+			throw new Error('Table is required for createCrud');
+		}
+
 		const validation = crudOptions.validation || options.validation;
 
-		return crudFactory(db, table, {
+		const mergedOptions = {
 			...options,
 			...crudOptions,
 			validation,
-		});
+		};
+
+		return crudFactory(db, table, mergedOptions);
 	};
 }

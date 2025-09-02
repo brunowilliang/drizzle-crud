@@ -1,34 +1,21 @@
-import {
-	and,
-	asc,
-	count,
-	desc,
-	eq,
-	ilike,
-	inArray,
-	isNull,
-	type KnownKeysOnly,
-	or,
-	SQL,
-} from 'drizzle-orm';
-import type {
-	BuildQueryResult,
-	DBQueryConfig,
-	ExtractTablesWithRelations,
-} from 'drizzle-orm/relations';
+import { eq, isNull, like, or, SQL } from 'drizzle-orm';
 
-import { parseFilters } from './filters.ts';
-import { type StandardSchemaV1, standardValidate } from './standard-schema.ts';
+import { createBulkCreateMethod } from './crud/bulkCreate.ts';
+import { createBulkDeleteMethod } from './crud/bulkDelete.ts';
+import { createBulkRestoreMethod } from './crud/bulkRestore.ts';
+import { createCreateMethod } from './crud/create.ts';
+import { createDeleteOneMethod } from './crud/deleteOne.ts';
+import { createFindOneMethod } from './crud/findOne.ts';
+import { createListMethod } from './crud/list.ts';
+import { createPermanentDeleteMethod } from './crud/permanentDelete.ts';
+import { createRestoreMethod } from './crud/restore.ts';
+import { createUpdateMethod } from './crud/update.ts';
 import type {
 	Actor,
-	CrudOperation,
 	CrudOptions,
 	DrizzleColumn,
 	DrizzleDatabase,
 	DrizzleTableWithId,
-	FilterParams,
-	FindByIdParams,
-	ListParams,
 	ListSchemaOptions,
 	OperationContext,
 	ScopeFilters,
@@ -58,11 +45,24 @@ function createSchemas<
 	const listOptions: ListSchemaOptions<T> = {
 		searchFields: options.searchFields,
 		allowedFilters: options.allowedFilters,
-		defaultItemsPerPage: options.defaultItemsPerPage,
-		maxItemsPerPage: options.maxItemsPerPage,
+		defaultPageSize: options.defaultPageSize,
+		maxPageSize: options.maxPageSize,
 		allowIncludeDeleted: !!options.softDelete,
 	};
 
+	// Check if validation is a custom object with schemas
+	const customSchemas = options.validation as any;
+	if (customSchemas && !customSchemas.createInsertSchema) {
+		// Custom schemas provided directly
+		return {
+			insertSchema: customSchemas.createSchema || customSchemas.insertSchema,
+			updateSchema: customSchemas.updateSchema,
+			listSchema: customSchemas.listSchema,
+			idSchema: customSchemas.idSchema,
+		};
+	}
+
+	// Use validation adapter to create schemas
 	return {
 		insertSchema: validation.createInsertSchema(table),
 		updateSchema: validation.createUpdateSchema(table),
@@ -81,88 +81,45 @@ export function crudFactory<
 	table: T,
 	options: CrudOptions<TDatabase, T, TActor, TScopeFilters> = {},
 ) {
+	if (!table) {
+		throw new Error('Table is required for crudFactory');
+	}
+
 	const {
 		searchFields = [],
-		defaultItemsPerPage = 20,
-		maxItemsPerPage = 100,
+		defaultPageSize = 20,
+		maxPageSize = 100,
 		allowedFilters = [],
 		softDelete,
 		scopeFilters = {} as TScopeFilters,
-		hooks = {},
 		validation,
 	} = options;
 
-	// Get table name from schema - SQLite doesn't have table._.name
-	const schemaEntries = Object.entries(db._.fullSchema);
-	const tableEntry = schemaEntries.find(
-		([_, schemaTable]) => schemaTable === table,
+	// Access table name from Symbol for SQLite compatibility
+	const tableNameSymbol = Object.getOwnPropertySymbols(table).find(
+		(sym) => sym.toString() === 'Symbol(drizzle:Name)',
 	);
-	const tableName = (tableEntry?.[0] ||
-		'unknown') as keyof TDatabase['_']['fullSchema'];
 
-	type TSchema = ExtractTablesWithRelations<TDatabase['_']['fullSchema']>;
-	type TFields = TSchema[typeof tableName];
+	if (!tableNameSymbol) {
+		throw new Error('Unable to find table name symbol');
+	}
 
-	type QueryOneGeneric = DBQueryConfig<'one', true, TSchema, TFields>;
-	type QueryManyGeneric = DBQueryConfig<'many', true, TSchema, TFields>;
-
-	type FindOneInput<TSelections extends QueryOneGeneric> = KnownKeysOnly<
-		TSelections,
-		QueryOneGeneric
-	>;
-
-	type ListGeneric = Omit<QueryManyGeneric, 'offset' | 'where'> &
-		ListParams<T> & {
-			where?: SQL;
-		};
-
-	type ListInput<TSelections extends ListGeneric> = KnownKeysOnly<
-		TSelections,
-		ListGeneric
-	>;
-
-	type FindOneResult<TSelections extends QueryOneGeneric> = BuildQueryResult<
-		TSchema,
-		TFields,
-		TSelections
-	>;
-
-	type ListResult<TSelections extends QueryManyGeneric> = BuildQueryResult<
-		TSchema,
-		TFields,
-		TSelections
-	>[];
+	const tableName = (table as any)[
+		tableNameSymbol
+	] as keyof TDatabase['_']['fullSchema'];
 
 	const schemas = createSchemas(table, options, validation);
-
-	const getDb = (
-		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	) => context?.db || db;
-
-	const getQueryBuilder = (
-		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	) => {
-		const dbInstance = getDb(context);
-		return (dbInstance as any).query[tableName] as any;
-	};
 
 	const getColumn = (key: keyof T['$inferInsert']) => {
 		return table[key as keyof T] as DrizzleColumn<any, any, any>;
 	};
 
-	const applyFilters = (
-		conditions: SQL[],
-		filters?: FilterParams<T['$inferSelect']>,
-	) => {
-		const parsedFilters = parseFilters(table, filters, allowedFilters);
-
-		conditions.push(...parsedFilters);
-	};
-
 	const applySearch = (conditions: SQL[], search?: string) => {
 		if (search?.trim() && searchFields.length > 0) {
 			const searchConditions = searchFields.map((field) =>
-				ilike(getColumn(field), `%${search}%`),
+				// Use 'like' for SQLite compatibility (case-sensitive)
+				// TODO: In the future, implement dialect detection for proper case-insensitive search
+				like(getColumn(field), `%${search}%`),
 			);
 			conditions.push(or(...searchConditions)!);
 		}
@@ -192,13 +149,12 @@ export function crudFactory<
 		const column = getColumn(softDelete.field);
 		const notDeletedValue = softDelete.notDeletedValue ?? null;
 
-		// Use isNull for null comparisons in SQLite
+		// Use isNull for null values, eq for other values
 		if (notDeletedValue === null) {
 			conditions.push(isNull(column));
 		} else {
 			conditions.push(eq(column, notDeletedValue));
 		}
-
 		return conditions;
 	};
 
@@ -211,365 +167,97 @@ export function crudFactory<
 		return { deletedValue, notDeletedValue };
 	};
 
-	const validateHook =
-		hooks.validate ??
-		(({ context }) => {
-			return context?.skipValidation ?? true;
-		});
-
-	const validate = async <TInput, TOutput>(
-		operation: CrudOperation,
-		data: TInput,
-		schema?: StandardSchemaV1<TInput, TOutput>,
-		context: OperationContext<TDatabase, T, TActor, TScopeFilters> = {},
-	) => {
-		if (schema && validateHook({ operation, data, context })) {
-			return standardValidate(schema, data);
-		}
-
-		return data;
-	};
-
-	const create = async (
-		data: T['$inferInsert'],
-		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	): Promise<T['$inferSelect']> => {
-		const validatedData = await validate(
-			'create',
-			data,
-			schemas.insertSchema,
-			context,
-		);
-
-		const transformed = hooks.beforeCreate?.(validatedData) ?? validatedData;
-
-		const dbInstance = getDb(context);
-
-		const result = await dbInstance
-			.insert(table)
-			.values(transformed)
-			.returning();
-
-		return Array.isArray(result) ? result[0] : (result as T['$inferSelect']);
-	};
-
-	const findById = async <TSelections extends QueryOneGeneric>(
-		id: T['$inferSelect']['id'],
-		params?: FindOneInput<TSelections> & FindByIdParams,
-		context?: Omit<
-			OperationContext<TDatabase, T, TActor, TScopeFilters>,
-			'skipValidation'
-		>,
-	) => {
-		const builder = getQueryBuilder(context);
-
-		const conditions: SQL[] = [eq(table.id, id)];
-
-		applyScopeFilters(conditions, context);
-		applySoftDeleteFilter(conditions, params?.includeDeleted);
-
-		const whereClause =
-			conditions.length > 1 ? and(...conditions) : conditions[0];
-
-		const result = await builder.findFirst({
-			columns: params?.columns,
-			with: params?.with,
-			where: whereClause,
-			extras: params?.extras,
-		});
-
-		return result as FindOneResult<TSelections> | null;
-	};
-
-	const list = async <TSelections extends ListGeneric>(
-		params: ListInput<TSelections>,
-		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	) => {
-		const dbInstance = getDb(context);
-		const builder = getQueryBuilder(context);
-
-		const validatedParams = await validate(
-			'list',
-			params,
-			schemas.listSchema,
-			context,
-		);
-
-		// Build where conditions
-		const conditions: SQL[] = [];
-
-		if (params.where) {
-			conditions.push(params.where);
-		}
-
-		applyFilters(conditions, validatedParams.filters);
-		applySearch(conditions, validatedParams.search);
-		applyScopeFilters(conditions, context);
-		applySoftDeleteFilter(conditions, validatedParams.includeDeleted);
-
-		const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-		const limit = Math.min(
-			validatedParams.perPage || defaultItemsPerPage,
-			maxItemsPerPage,
-		);
-		const page = validatedParams.page || 1;
-		const offset = (page - 1) * limit;
-
-		const orderBy = validatedParams.orderBy?.map(({ field, direction }) => {
-			const column = getColumn(field as keyof T['$inferInsert']);
-			return direction === 'desc' ? desc(column) : asc(column);
-		});
-
-		const data = await builder.findMany({
-			columns: params.columns,
-			with: params.with,
-			where: whereClause,
-			orderBy,
-			limit,
-			offset,
-			extras: params.extras,
-		});
-
-		let countQuery = (dbInstance as any).select({ count: count() }).from(table);
-
-		const countConditions: SQL[] = [...conditions];
-
-		if (countConditions.length > 0) {
-			countQuery = countQuery.where(and(...countConditions));
-		}
-
-		const totalResult = await countQuery;
-
-		const total = totalResult[0].count as number;
-
-		const totalPages = Math.ceil(total / limit);
-		const hasNextPage = page * limit < total;
-		const hasPreviousPage = page > 1;
-
-		return {
-			results: data,
-			page,
-			perPage: limit,
-			hasNextPage,
-			hasPreviousPage,
-			totalPages,
-			totalItems: total,
-		} as {
-			results: ListResult<TSelections>;
-			page: number;
-			perPage: number;
-			hasNextPage: boolean;
-			hasPreviousPage: boolean;
-			totalPages: number;
-			totalItems: number;
-		};
-	};
-
-	const update = async (
-		id: T['$inferSelect']['id'],
-		updates: Partial<T['$inferInsert']>,
-		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	): Promise<T['$inferSelect']> => {
-		const validatedData = await validate(
-			'update',
-			updates,
-			schemas.updateSchema,
-			context,
-		);
-
-		const transformed = hooks.beforeUpdate?.(validatedData) ?? validatedData;
-		const dbInstance = getDb(context);
-
-		const conditions: SQL[] = [eq(table.id, id)];
-
-		applyScopeFilters(conditions, context);
-		applySoftDeleteFilter(conditions, false);
-
-		const whereClause =
-			conditions.length > 1 ? and(...conditions) : conditions[0];
-
-		const result = await dbInstance
-			.update(table)
-			.set(transformed)
-			.where(whereClause)
-			.returning();
-
-		return Array.isArray(result) ? result[0] : (result as T['$inferSelect']);
-	};
-
-	const deleteOne = async (
-		id: T['$inferSelect']['id'],
-		context?: Omit<
-			OperationContext<TDatabase, T, TActor, TScopeFilters>,
-			'skipValidation'
-		>,
-	): Promise<{ success: boolean }> => {
-		const dbInstance = getDb(context);
-
-		const conditions: SQL[] = [eq(table.id, id)];
-		applyScopeFilters(conditions, context);
-
-		const whereClause =
-			conditions.length > 1 ? and(...conditions) : conditions[0];
-
-		if (softDelete) {
-			const deleteValues = getSoftDeleteValues();
-			if (!deleteValues) throw new Error('Soft delete configuration error');
-
-			await dbInstance
-				.update(table)
-				.set({ [softDelete.field]: deleteValues.deletedValue } as any)
-				.where(whereClause);
-		} else {
-			await dbInstance.delete(table).where(whereClause);
-		}
-
-		return { success: true };
-	};
-
-	const restore = async (
-		id: T['$inferSelect']['id'],
-		context?: Omit<
-			OperationContext<TDatabase, T, TActor, TScopeFilters>,
-			'skipValidation'
-		>,
-	): Promise<{ success: boolean }> => {
-		if (!softDelete) {
-			throw new Error(
-				'Restore operation requires soft delete to be configured',
-			);
-		}
-
-		const dbInstance = getDb(context);
-		const deleteValues = getSoftDeleteValues();
-		if (!deleteValues) throw new Error('Soft delete configuration error');
-
-		const conditions: SQL[] = [eq(table.id, id)];
-		applyScopeFilters(conditions, context);
-		const whereClause =
-			conditions.length > 1 ? and(...conditions) : conditions[0];
-
-		const result = await dbInstance
-			.update(table)
-			.set({ [softDelete.field]: deleteValues.notDeletedValue } as any)
-			.where(whereClause)
-			.returning();
-
-		const restored = Array.isArray(result) ? result[0] : result;
-		return { success: !!restored };
-	};
-
-	const permanentDelete = async (
-		id: T['$inferSelect']['id'],
-		context?: Omit<
-			OperationContext<TDatabase, T, TActor, TScopeFilters>,
-			'skipValidation'
-		>,
-	): Promise<{ success: boolean }> => {
-		const dbInstance = getDb(context);
-
-		// Build where conditions
-		const conditions: SQL[] = [eq(table.id, id)];
-		applyScopeFilters(conditions, context);
-		const whereClause =
-			conditions.length > 1 ? and(...conditions) : conditions[0];
-
-		await dbInstance.delete(table).where(whereClause);
-		return { success: true };
-	};
-
-	const bulkCreate = async (
-		data: T['$inferInsert'][],
-		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	) => {
-		const dbInstance = getDb(context);
-
-		const transformedData = await Promise.all(
-			data.map(async (item) => {
-				const validated = await validate(
-					'bulkCreate',
-					item,
-					schemas.insertSchema,
-					context,
-				);
-
-				return hooks.beforeCreate?.(validated) ?? validated;
-			}),
-		);
-
-		await dbInstance.insert(table).values(transformedData);
-
-		return {
-			success: true,
-			count: transformedData.length,
-		};
-	};
-
-	const bulkDelete = async (
-		ids: T['$inferSelect']['id'][],
-		context?: Omit<
-			OperationContext<TDatabase, T, TActor, TScopeFilters>,
-			'skipValidation'
-		>,
-	): Promise<{ success: boolean; count: number }> => {
-		const dbInstance = getDb(context);
-
-		const conditions: SQL[] = [inArray(table.id, ids)];
-		applyScopeFilters(conditions, context);
-		const whereClause =
-			conditions.length > 1 ? and(...conditions) : conditions[0];
-
-		if (softDelete) {
-			const deleteValues = getSoftDeleteValues();
-			if (!deleteValues) throw new Error('Soft delete configuration error');
-
-			const result = await dbInstance
-				.update(table)
-				.set({ [softDelete.field]: deleteValues.deletedValue } as any)
-				.where(whereClause);
-
-			return { success: true, count: (result as any).changes || ids.length };
-		}
-		const result = await dbInstance.delete(table).where(whereClause);
-		return { success: true, count: (result as any).changes || ids.length };
-	};
-
-	const bulkRestore = async (
-		ids: T['$inferSelect']['id'][],
-		context?: Omit<
-			OperationContext<TDatabase, T, TActor, TScopeFilters>,
-			'skipValidation'
-		>,
-	): Promise<{ success: boolean; count: number }> => {
-		if (!softDelete) {
-			throw new Error(
-				'Bulk restore operation requires soft delete to be configured',
-			);
-		}
-
-		const dbInstance = getDb(context);
-		const deleteValues = getSoftDeleteValues();
-		if (!deleteValues) throw new Error('Soft delete configuration error');
-
-		const conditions: SQL[] = [inArray(table.id, ids)];
-
-		applyScopeFilters(conditions, context);
-
-		const whereClause =
-			conditions.length > 1 ? and(...conditions) : conditions[0];
-
-		const result = await dbInstance
-			.update(table)
-			.set({ [softDelete.field]: deleteValues.notDeletedValue } as any)
-			.where(whereClause);
-
-		return { success: true, count: (result as any).changes || ids.length };
-	};
+	const create = createCreateMethod({
+		db,
+		table,
+		options,
+		schemas,
+	});
+
+	const findOne = createFindOneMethod({
+		db,
+		table,
+		tableName,
+		options,
+		getColumn,
+		applyScopeFilters,
+		applySoftDeleteFilter,
+	});
+
+	const list = createListMethod({
+		db,
+		table,
+		tableName,
+		options,
+		schemas,
+		defaultPageSize,
+		maxPageSize,
+		searchFields,
+		allowedFilters,
+		getColumn,
+		applySearch,
+		applyScopeFilters,
+		applySoftDeleteFilter,
+	});
+
+	const update = createUpdateMethod({
+		db,
+		table,
+		options,
+		schemas,
+		applyScopeFilters,
+		applySoftDeleteFilter,
+	});
+
+	const deleteOne = createDeleteOneMethod({
+		db,
+		table,
+		options,
+		applyScopeFilters,
+		getSoftDeleteValues,
+	});
+
+	const restore = createRestoreMethod({
+		db,
+		table,
+		options,
+		applyScopeFilters,
+		getSoftDeleteValues,
+	});
+
+	const permanentDelete = createPermanentDeleteMethod({
+		db,
+		table,
+		options,
+		applyScopeFilters,
+	});
+
+	const bulkCreate = createBulkCreateMethod({
+		db,
+		table,
+		options,
+		schemas,
+	});
+
+	const bulkDelete = createBulkDeleteMethod({
+		db,
+		table,
+		options,
+		applyScopeFilters,
+		getSoftDeleteValues,
+	});
+
+	const bulkRestore = createBulkRestoreMethod({
+		db,
+		table,
+		options,
+		applyScopeFilters,
+		getSoftDeleteValues,
+	});
 
 	return {
 		create,
-		findById,
+		findOne,
 		list,
 		update,
 		deleteOne,
