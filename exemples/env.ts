@@ -1,5 +1,9 @@
-export const env = {
-	DATABASE_URL: 'libsql://drizzle-brunowilliang.aws-eu-west-1.turso.io',
-	DATABASE_AUTH_TOKEN:
-		'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NTY3NDI2NTQsImlkIjoiNjJhOTc0NTMtZjlhYS00OGM4LThlYWUtM2ZjNGI0NTRmOTI4IiwicmlkIjoiOTY3YzY0YWItM2M3My00N2ZkLTkwY2QtZmRhMDEyZDc5M2YzIn0.rIEtqrEUJTjo63E7u1AmpRiZZ-_Zwwl1ICAwH3z1ylnY5D2q0-HkFTJtebS4MkRJolfC9RYszYLjkWGN7JXICg',
-};
+import { z } from 'zod';
+
+// Schema completo
+const envSchema = z.object({
+	DATABASE_URL: z.url().startsWith('libsql://'),
+	DATABASE_AUTH_TOKEN: z.string().min(1),
+});
+
+export const env = envSchema.parse(process.env);

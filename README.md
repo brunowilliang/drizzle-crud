@@ -1,26 +1,26 @@
 # Drizzle CRUD Factory
 
-Uma biblioteca TypeScript que cria operações CRUD automatizadas sobre o Drizzle
-ORM, especificamente para SQLite/Turso.
+A TypeScript library that creates automated CRUD operations over Drizzle ORM,
+specifically for SQLite/Turso.
 
-## O que é?
+## What is it?
 
-O Drizzle CRUD Factory é uma camada de abstração que gera automaticamente
-operações CRUD (Create, Read, Update, Delete) completas a partir de suas tabelas
-Drizzle. Ele adiciona funcionalidades essenciais como:
+Drizzle CRUD Factory is an abstraction layer that automatically generates
+complete CRUD (Create, Read, Update, Delete) operations from your Drizzle
+tables. It adds essential features like:
 
-- ✅ **Operações CRUD completas** com tipagem TypeScript
-- 🔍 **Busca e filtros avançados**
-- 📄 **Paginação automática**
-- ♻️ **Soft delete** (exclusão lógica)
-- ✅ **Validação** com Zod
-- 🪝 **Hooks** para customização
-- 🔐 **Multi-tenancy** com scope filters
-- 📦 **Operações em lote**
+- ✅ **Complete CRUD operations** with TypeScript typing
+- 🔍 **Advanced search and filters**
+- 📄 **Automatic pagination**
+- ♻️ **Soft delete** (logical deletion)
+- ✅ **Validation** with Zod
+- 🪝 **Hooks** for customization
+- 🔐 **Multi-tenancy** with scope filters
+- 📦 **Bulk operations**
 
-## Como funciona?
+## How it works?
 
-### 1. Defina sua tabela Drizzle
+### 1. Define your Drizzle table
 
 ```typescript
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
@@ -37,20 +37,20 @@ export const users = sqliteTable("users", {
 });
 ```
 
-### 2. Crie o CRUD
+### 2. Create the CRUD
 
 ```typescript
 import { drizzleCrud } from "drizzle-crud";
 import { zod } from "drizzle-crud/zod";
 
-// Cria a factory
+// Create the factory
 const crud = drizzleCrud(db, { validation: zod() });
 
-// Gera CRUD para a tabela users
+// Generate CRUD for users table
 const usersCrud = crud(users, {
-  searchFields: ["name", "email"], // Campos pesquisáveis
-  allowedFilters: ["role"], // Filtros permitidos
-  softDelete: { // Configuração de soft delete
+  searchFields: ["name", "email"], // Searchable fields
+  allowedFilters: ["role"], // Allowed filters
+  softDelete: { // Soft delete configuration
     field: "deletedAt",
     deletedValue: new Date(),
     notDeletedValue: null,
@@ -58,20 +58,20 @@ const usersCrud = crud(users, {
 });
 ```
 
-### 3. Use as operações geradas
+### 3. Use the generated operations
 
 ```typescript
-// Criar
+// Create
 const user = await usersCrud.create({
   email: "bruno@example.com",
   name: "Bruno Garcia",
   role: "admin",
 });
 
-// Buscar por qualquer campo
+// Find by any field
 const user = await usersCrud.findOne({ email: "bruno@example.com" });
 
-// Listar com paginação e filtros
+// List with pagination and filters
 const result = await usersCrud.list({
   page: 1,
   perPage: 20,
@@ -79,50 +79,50 @@ const result = await usersCrud.list({
   filters: { role: "admin" },
 });
 
-// Atualizar
+// Update
 await usersCrud.update(user.id, { name: "Bruno G." });
 
-// Deletar (soft delete)
+// Delete (soft delete)
 await usersCrud.deleteOne(user.id);
 
-// Restaurar
+// Restore
 await usersCrud.restore(user.id);
 ```
 
-## Métodos disponíveis
+## Available methods
 
-### Operações básicas
+### Basic operations
 
-- `create(data)` - Cria um registro
-- `findOne(conditions)` - Busca um registro por qualquer campo
-- `list(params)` - Lista com paginação, busca e filtros
-- `update(id, data)` - Atualiza um registro
-- `deleteOne(id)` - Deleta um registro (soft ou hard delete)
-- `restore(id)` - Restaura um registro deletado
-- `permanentDelete(id)` - Deleta permanentemente
+- `create(data)` - Creates a record
+- `findOne(conditions)` - Finds a record by any field
+- `list(params)` - Lists with pagination, search and filters
+- `update(id, data)` - Updates a record
+- `deleteOne(id)` - Deletes a record (soft or hard delete)
+- `restore(id)` - Restores a deleted record
+- `permanentDelete(id)` - Permanently deletes
 
-### Operações em lote
+### Bulk operations
 
-- `bulkCreate(items)` - Cria múltiplos registros
-- `bulkDelete(ids)` - Deleta múltiplos registros
-- `bulkRestore(ids)` - Restaura múltiplos registros
+- `bulkCreate(items)` - Creates multiple records
+- `bulkDelete(ids)` - Deletes multiple records
+- `bulkRestore(ids)` - Restores multiple records
 
-## Recursos avançados
+## Advanced features
 
-### Filtros complexos
+### Complex filters
 
 ```typescript
-// Operadores de comparação
+// Comparison operators
 const result = await usersCrud.list({
   filters: {
-    age: { gt: 18, lte: 65 }, // maior que 18, menor ou igual a 65
+    age: { gt: 18, lte: 65 }, // greater than 18, less or equal to 65
     role: { in: ["admin", "editor"] }, // IN
     email: { like: "%@company.com" }, // LIKE
     status: { not: "suspended" }, // NOT
   },
 });
 
-// Lógica AND/OR
+// AND/OR logic
 const result = await usersCrud.list({
   filters: {
     OR: [
@@ -138,22 +138,22 @@ const result = await usersCrud.list({
 ```typescript
 const usersCrud = crud(users, {
   hooks: {
-    // Antes de criar
+    // Before creating
     beforeCreate: (data) => ({
       ...data,
       email: data.email.toLowerCase(),
     }),
 
-    // Antes de atualizar
+    // Before updating
     beforeUpdate: (data) => {
       const { password, ...safe } = data;
-      return safe; // Remove senha de updates
+      return safe; // Remove password from updates
     },
 
-    // Validação customizada
+    // Custom validation
     validate: ({ operation, data, context }) => {
       if (context.actor?.role === "admin") {
-        return false; // Admin pula validação
+        return false; // Admin skips validation
       }
       return true;
     },
@@ -161,19 +161,19 @@ const usersCrud = crud(users, {
 });
 ```
 
-### Multi-tenancy com Scope Filters
+### Multi-tenancy with Scope Filters
 
 ```typescript
 const projectsCrud = crud(projects, {
   scopeFilters: {
-    // Filtra por tenant automaticamente
+    // Filter by tenant automatically
     tenantId: (value, actor) => {
       return eq(projects.tenantId, actor.properties.tenantId);
     },
   },
 });
 
-// Todas operações serão filtradas pelo tenant
+// All operations will be filtered by tenant
 const projects = await projectsCrud.list({}, {
   actor: {
     type: "user",
@@ -182,31 +182,31 @@ const projects = await projectsCrud.list({}, {
 });
 ```
 
-### Resposta da paginação
+### Pagination response
 
 ```typescript
 const result = await usersCrud.list({ page: 2, perPage: 20 });
 
-// Retorna:
+// Returns:
 {
-  results: User[],         // Dados
-  page: 2,                // Página atual
-  perPage: 20,            // Items por página
-  totalItems: 156,        // Total de registros
-  totalPages: 8,          // Total de páginas
-  hasNextPage: true,      // Tem próxima página
-  hasPreviousPage: true,  // Tem página anterior
+  results: User[],         // Data
+  page: 2,                // Current page
+  perPage: 20,            // Items per page
+  totalItems: 156,        // Total records
+  totalPages: 8,          // Total pages
+  hasNextPage: true,      // Has next page
+  hasPreviousPage: true,  // Has previous page
 }
 ```
 
-## Validação
+## Validation
 
-A biblioteca integra com Zod para validação automática baseada no schema:
+The library integrates with Zod for automatic validation based on schema:
 
 ```typescript
 import { z } from "zod";
 
-// Validação customizada
+// Custom validation
 const customValidation = {
   ...zod(),
   createInsertSchema: () =>
@@ -220,12 +220,12 @@ const customValidation = {
 const crud = drizzleCrud(db, { validation: customValidation });
 ```
 
-## Contexto e Segurança
+## Context and Security
 
-Passe contexto para qualquer operação:
+Pass context to any operation:
 
 ```typescript
-// Contexto do usuário autenticado
+// Authenticated user context
 const context = {
   actor: {
     type: "user",
@@ -235,55 +235,55 @@ const context = {
       tenantId: 456,
     },
   },
-  skipValidation: true, // Pula validação se necessário
+  skipValidation: true, // Skip validation if needed
 };
 
-// Usa contexto em qualquer operação
+// Use context in any operation
 await usersCrud.create(data, context);
 await usersCrud.list({}, context);
 ```
 
 ## TypeScript
 
-A biblioteca é 100% tipada e infere tipos automaticamente:
+The library is 100% typed and automatically infers types:
 
 ```typescript
-// Tipos inferidos do schema Drizzle
+// Types inferred from Drizzle schema
 const user = await usersCrud.create({
   email: "test@example.com",
   name: "Test",
-  role: "admin", // ✅ Validado contra enum
-  // role: "super", // ❌ Erro de tipo
+  role: "admin", // ✅ Validated against enum
+  // role: "super", // ❌ Type error
 });
 
-// user é totalmente tipado
-console.log(user.id, user.email); // ✅ Autocomplete funciona
+// user is fully typed
+console.log(user.id, user.email); // ✅ Autocomplete works
 ```
 
-## Instalação
+## Installation
 
 ```bash
 npm install drizzle-crud
-# ou
+# or
 bun add drizzle-crud
 ```
 
-## Dependências
+## Dependencies
 
-- `drizzle-orm` - ORM base
-- `@libsql/client` - Cliente SQLite/Turso
-- `zod` (opcional) - Para validação
+- `drizzle-orm` - Base ORM
+- `@libsql/client` - SQLite/Turso client
+- `zod` (optional) - For validation
 
-## Por que usar?
+## Why use it?
 
-1. **Reduz boilerplate**: Gera automaticamente todas operações CRUD
-2. **Type-safe**: 100% tipado com TypeScript
-3. **Flexível**: Hooks e configurações para customizar comportamento
-4. **Completo**: Paginação, busca, filtros, soft delete, tudo incluso
-5. **Multi-tenant ready**: Suporte nativo para isolamento de dados
-6. **Validação integrada**: Com Zod ou seu próprio validador
-7. **Performance**: Queries otimizadas para SQLite
+1. **Reduces boilerplate**: Automatically generates all CRUD operations
+2. **Type-safe**: 100% typed with TypeScript
+3. **Flexible**: Hooks and configurations to customize behavior
+4. **Complete**: Pagination, search, filters, soft delete, everything included
+5. **Multi-tenant ready**: Native support for data isolation
+6. **Integrated validation**: With Zod or your own validator
+7. **Performance**: Optimized queries for SQLite
 
-## Licença
+## License
 
 MIT
