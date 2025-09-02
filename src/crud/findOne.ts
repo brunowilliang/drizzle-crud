@@ -79,14 +79,14 @@ export function createFindOneMethod<
 			'skipValidation'
 		>,
 	): Promise<FindOneResult<TSelections> | null>;
-	async function findOne<TSelections extends QueryOneGeneric>(
+	async function findOne<TSelections extends QueryOneGeneric = QueryOneGeneric>(
 		where: Partial<T['$inferSelect']>,
-		params?: FindOneInput<TSelections> & FindByIdParams,
+		params?: (FindOneInput<TSelections> & FindByIdParams) | FindByIdParams,
 		context?: Omit<
 			OperationContext<TDatabase, T, TActor, TScopeFilters>,
 			'skipValidation'
 		>,
-	) {
+	): Promise<FindOneResult<TSelections> | T['$inferSelect'] | null> {
 		const dbInstance = getDb(db, context);
 		const conditions: SQL[] = [];
 

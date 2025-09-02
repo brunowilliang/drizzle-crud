@@ -109,10 +109,18 @@ export function createListMethod<
 		totalItems: number;
 		totalPages: number;
 	}>;
-	async function list<TSelections extends ListGeneric>(
-		params: ListInput<TSelections>,
+	async function list<TSelections extends ListGeneric = ListGeneric>(
+		params: ListInput<TSelections> | ListParams<T>,
 		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	) {
+	): Promise<{
+		hasNextPage: boolean;
+		hasPreviousPage: boolean;
+		page: number;
+		perPage: number;
+		results: ListResult<TSelections> | T['$inferSelect'][];
+		totalItems: number;
+		totalPages: number;
+	}> {
 		const dbInstance = getDb(db, context);
 		// const builder = (dbInstance as any).query[tableName];
 
@@ -126,7 +134,7 @@ export function createListMethod<
 		// Build where conditions
 		const conditions: SQL[] = [];
 
-		if (params.where) {
+		if ('where' in params && params.where) {
 			conditions.push(params.where);
 		}
 

@@ -1,13 +1,39 @@
 {
-  "name": "drizzle-crud",
-  "version": "0.1.4",
+  "name": "@bwg-labs/drizzle-crud",
+  "version": "0.1.0",
+  "description": "A TypeScript library that creates automated CRUD operations over Drizzle ORM, specifically for SQLite/Turso",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "package.json"
+  ],
+  "keywords": [
+    "drizzle",
+    "orm",
+    "crud",
+    "sqlite",
+    "turso",
+    "typescript",
+    "database",
+    "pagination",
+    "validation",
+    "zod"
+  ],
+  "author": "Bruno Garcia",
+  "license": "MIT",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "directory": "packages/drizzle-crud"
+    "url": "git+https://github.com/brunowilliang/drizzle-crud.git"
+  },
+  "homepage": "https://github.com/brunowilliang/drizzle-crud#readme",
+  "bugs": {
+    "url": "https://github.com/brunowilliang/drizzle-crud/issues"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",

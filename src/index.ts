@@ -29,10 +29,10 @@ export function drizzleCrud<TDatabase extends DrizzleDatabase>(
 
 		const validation = crudOptions.validation || options.validation;
 
-		const mergedOptions = {
+		const mergedOptions: CrudOptions<TDatabase, T, TActor, TScopeFilters> = {
 			...options,
 			...crudOptions,
-			validation,
+			validation: validation as any,
 		};
 
 		return crudFactory(db, table, mergedOptions);

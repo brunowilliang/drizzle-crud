@@ -1,0 +1,26 @@
+# Source files
+src/
+test/
+exemples/
+
+# Config files
+tsconfig.json
+biome.json
+bun.lock
+
+# Development files
+.DS_Store
+.cursor/
+*.log
+*.tmp
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts (keep only dist)
+node_modules/
