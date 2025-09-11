@@ -195,18 +195,49 @@ const result = await usersCrud.list({
 
 #### Available Filter Operators
 
-| Operator | Description                         | Example                                                      |
-| -------- | ----------------------------------- | ------------------------------------------------------------ |
-| `equals` | Equal to (default)                  | `{ status: "active" }` or `{ status: { equals: "active" } }` |
-| `not`    | Not equal to                        | `{ status: { not: "suspended" } }`                           |
-| `gt`     | Greater than                        | `{ age: { gt: 18 } }`                                        |
-| `gte`    | Greater than or equal               | `{ age: { gte: 18 } }`                                       |
-| `lt`     | Less than                           | `{ age: { lt: 65 } }`                                        |
-| `lte`    | Less than or equal                  | `{ age: { lte: 65 } }`                                       |
-| `in`     | Value in array                      | `{ role: { in: ["admin", "editor"] } }`                      |
-| `notIn`  | Value not in array                  | `{ country: { notIn: ["PT", "BR", "ES"] } }`                 |
-| `like`   | Pattern matching (case sensitive)   | `{ email: { like: "%@company.com" } }`                       |
-| `ilike`  | Pattern matching (case insensitive) | `{ name: { ilike: "%garcia%" } }`                            |
+| Operator  | Description                                   | Example                                                      |
+| --------- | --------------------------------------------- | ------------------------------------------------------------ |
+| `equals`  | Equal to (default)                            | `{ status: "active" }` or `{ status: { equals: "active" } }` |
+| `not`     | Not equal to                                  | `{ status: { not: "suspended" } }`                           |
+| `gt`      | Greater than                                  | `{ age: { gt: 18 } }`                                        |
+| `gte`     | Greater than or equal                         | `{ age: { gte: 18 } }`                                       |
+| `lt`      | Less than                                     | `{ age: { lt: 65 } }`                                        |
+| `lte`     | Less than or equal                            | `{ age: { lte: 65 } }`                                       |
+| `in`      | Value in array ⚠️                             | `{ role: { in: ["admin", "editor"] } }`                      |
+| `notIn`   | Value not in array ⚠️                         | `{ country: { notIn: ["PT", "BR", "ES"] } }`                 |
+| `like`    | Pattern matching (case insensitive in SQLite) | `{ email: { like: "%@company.com" } }`                       |
+| `ilike`   | Pattern matching (not supported in SQLite)    | `{ name: { ilike: "%garcia%" } }`                            |
+| `notLike` | Exclude pattern                               | `{ name: { notLike: "%admin%" } }`                           |
+
+⚠️ **Note**: `in` and `notIn` operators only work with scalar string fields, not
+JSON arrays.
+
+#### Working with JSON Array Fields
+
+When filtering JSON array fields in SQLite, use `like`/`notLike` operators with
+quoted values:
+
+```typescript
+// Find users with "BR" in their countries array
+const brazilUsers = await usersCrud.list({
+  filters: {
+    countries: { like: '%"BR"%' },
+  },
+});
+
+// Exclude users with "PT" in their countries array
+const nonPortugueseUsers = await usersCrud.list({
+  filters: {
+    countries: { notLike: '%"PT"%' },
+  },
+});
+```
+
+**Important limitations**:
+
+- `notLike` also excludes NULL values
+- Direct NULL filters may not work with JSON fields
+- `in`/`notIn` do not search within JSON arrays
 
 ### Hooks
 
@@ -358,6 +389,32 @@ bun add drizzle-crud
 5. **Multi-tenant ready**: Native support for data isolation
 6. **Integrated validation**: With Zod or your own validator
 7. **Performance**: Optimized queries for SQLite
+
+## Common Issues & Solutions
+
+### Filtering JSON Arrays in SQLite
+
+SQLite stores JSON arrays as strings, so standard `in`/`notIn` operators don't
+work for searching within arrays. Use `like`/`notLike` instead:
+
+```typescript
+// ❌ WRONG - This won't work
+{ countries: { in: ['BR'] } }
+
+// ✅ CORRECT - Use like with quotes
+{ countries: { like: '%"BR"%' } }
+{ countries: { notLike: '%"PT"%' } }
+```
+
+### Case Sensitivity
+
+- SQLite's `LIKE` is case-insensitive by default
+- `ILIKE` is not supported in SQLite
+
+### NULL Handling with JSON
+
+- `notLike` excludes NULL values
+- Direct NULL filters (`{ field: null }`) may not work with JSON fields
 
 ## License
 

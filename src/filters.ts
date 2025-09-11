@@ -10,6 +10,7 @@ import {
 	lte,
 	ne,
 	notInArray,
+	notLike,
 	or,
 	type SQL,
 } from 'drizzle-orm';
@@ -153,6 +154,9 @@ export function parseFilterGroup<T extends DrizzleTableWithId>(
 						break;
 					case 'ilike':
 						conditions.push(ilike(column, value as string));
+						break;
+					case 'notLike':
+						conditions.push(notLike(column, value as string));
 						break;
 				}
 			});

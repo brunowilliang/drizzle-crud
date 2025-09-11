@@ -140,8 +140,10 @@ export function createDefaultFilterSchema<T extends DrizzleTable>(
 			lt: z.any().optional(),
 			lte: z.any().optional(),
 			in: z.array(z.any()).optional(),
+			notIn: z.array(z.any()).optional(),
 			like: z.string().optional(),
 			ilike: z.string().optional(),
+			notLike: z.string().optional(),
 		}),
 	]);
 

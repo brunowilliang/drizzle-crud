@@ -195,6 +195,7 @@ export type Filter<T = any> = {
 	notIn?: T[];
 	like?: string;
 	ilike?: string;
+	notLike?: string;
 };
 
 export type FilterParams<T extends Record<string, any>> = {
