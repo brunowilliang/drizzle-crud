@@ -1,6 +1,6 @@
 {
   "name": "@bwg-labs/drizzle-crud",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A TypeScript library that creates automated CRUD operations over Drizzle ORM, specifically for SQLite/Turso",
   "type": "module",
   "main": "./dist/index.js",
