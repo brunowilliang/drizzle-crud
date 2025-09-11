@@ -192,6 +192,7 @@ export type Filter<T = any> = {
 	lt?: T;
 	lte?: T;
 	in?: T[];
+	notIn?: T[];
 	like?: string;
 	ilike?: string;
 };

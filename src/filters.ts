@@ -9,6 +9,7 @@ import {
 	lt,
 	lte,
 	ne,
+	notInArray,
 	or,
 	type SQL,
 } from 'drizzle-orm';
@@ -140,6 +141,11 @@ export function parseFilterGroup<T extends DrizzleTableWithId>(
 					case 'in':
 						conditions.push(
 							inArray(column, Array.isArray(value) ? value : [value]),
+						);
+						break;
+					case 'notIn':
+						conditions.push(
+							notInArray(column, Array.isArray(value) ? value : [value]),
 						);
 						break;
 					case 'like':

@@ -16,6 +16,7 @@ export const users = sqliteTable(
 			.default('active'),
 		bio: text('bio'),
 		avatarUrl: text('avatar_url'),
+		countries: text('countries', { mode: 'json' }).default(['PT', 'BR', 'ES']),
 		deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 		createdAt: integer('created_at', { mode: 'timestamp' })
 			.notNull()

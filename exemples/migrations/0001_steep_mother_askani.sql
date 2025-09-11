@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `countries` text DEFAULT '["PT","BR","ES"]';

@@ -79,6 +79,21 @@ const result = await usersCrud.list({
   filters: { role: "admin" },
 });
 
+// Filter using IN operator (e.g., countries)
+const countries = ["PT", "BR", "ES"];
+const usersFromCountries = await usersCrud.list({
+  filters: {
+    country: { in: countries }, // Get users from Portugal, Brazil or Spain
+  },
+});
+
+// Filter using NOT IN operator
+const usersNotFromCountries = await usersCrud.list({
+  filters: {
+    country: { notIn: countries }, // Exclude users from these countries
+  },
+});
+
 // Update
 await usersCrud.update(user.id, { name: "Bruno G." });
 
@@ -116,9 +131,37 @@ await usersCrud.restore(user.id);
 const result = await usersCrud.list({
   filters: {
     age: { gt: 18, lte: 65 }, // greater than 18, less or equal to 65
-    role: { in: ["admin", "editor"] }, // IN
-    email: { like: "%@company.com" }, // LIKE
-    status: { not: "suspended" }, // NOT
+    status: { not: "suspended" }, // NOT equal
+    email: { like: "%@company.com" }, // LIKE pattern matching
+    createdAt: { gte: new Date("2024-01-01") }, // Date comparisons
+  },
+});
+
+// IN and NOT IN operators
+const result = await usersCrud.list({
+  filters: {
+    // Get users with specific roles
+    role: { in: ["admin", "editor"] }, // role IN ('admin', 'editor')
+
+    // Exclude users from specific countries
+    country: { notIn: ["PT", "BR", "ES"] }, // country NOT IN ('PT', 'BR', 'ES')
+  },
+});
+
+// Practical example: filtering by countries
+const targetCountries = ["PT", "BR", "ES"];
+
+// Get users FROM these countries
+const usersFromCountries = await usersCrud.list({
+  filters: {
+    country: { in: targetCountries },
+  },
+});
+
+// Get users NOT FROM these countries
+const usersNotFromCountries = await usersCrud.list({
+  filters: {
+    country: { notIn: targetCountries },
   },
 });
 
@@ -131,7 +174,39 @@ const result = await usersCrud.list({
     ],
   },
 });
+
+// Complex filters combining multiple operators
+const result = await usersCrud.list({
+  filters: {
+    // All conditions must match (AND)
+    status: "active",
+    role: { in: ["admin", "editor"] },
+    country: { notIn: ["US", "CA"] },
+    age: { gte: 18, lt: 65 },
+
+    // OR conditions
+    OR: [
+      { department: "IT" },
+      { department: "Engineering" },
+    ],
+  },
+});
 ```
+
+#### Available Filter Operators
+
+| Operator | Description                         | Example                                                      |
+| -------- | ----------------------------------- | ------------------------------------------------------------ |
+| `equals` | Equal to (default)                  | `{ status: "active" }` or `{ status: { equals: "active" } }` |
+| `not`    | Not equal to                        | `{ status: { not: "suspended" } }`                           |
+| `gt`     | Greater than                        | `{ age: { gt: 18 } }`                                        |
+| `gte`    | Greater than or equal               | `{ age: { gte: 18 } }`                                       |
+| `lt`     | Less than                           | `{ age: { lt: 65 } }`                                        |
+| `lte`    | Less than or equal                  | `{ age: { lte: 65 } }`                                       |
+| `in`     | Value in array                      | `{ role: { in: ["admin", "editor"] } }`                      |
+| `notIn`  | Value not in array                  | `{ country: { notIn: ["PT", "BR", "ES"] } }`                 |
+| `like`   | Pattern matching (case sensitive)   | `{ email: { like: "%@company.com" } }`                       |
+| `ilike`  | Pattern matching (case insensitive) | `{ name: { ilike: "%garcia%" } }`                            |
 
 ### Hooks
 
