@@ -1,3 +1,4 @@
+import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import type { StandardSchemaV1 } from '../standard-schema.ts';
 import type {
 	Actor,
@@ -19,7 +20,7 @@ export type CreateContext<
 	table: T;
 	options: CrudOptions<TDatabase, T, TActor, TScopeFilters>;
 	schemas: {
-		insertSchema?: StandardSchemaV1<T['$inferInsert']>;
+		insertSchema?: StandardSchemaV1<InferInsertModel<T>>;
 	};
 };
 
@@ -34,9 +35,9 @@ export function createCreateMethod<
 	const validate = createValidate(hooks);
 
 	return async (
-		data: T['$inferInsert'],
+		data: InferInsertModel<T>,
 		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	): Promise<T['$inferSelect']> => {
+	): Promise<InferSelectModel<T>> => {
 		const validatedData = await validate(
 			'create',
 			data,
@@ -57,6 +58,6 @@ export function createCreateMethod<
 			.values(transformed)
 			.returning();
 
-		return result as T['$inferSelect'];
+		return result as InferSelectModel<T>;
 	};
 }

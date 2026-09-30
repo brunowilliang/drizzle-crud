@@ -17,6 +17,7 @@ import type {
 	PaginationParams,
 	ValidationAdapter,
 } from './types.ts';
+import type { InferSelectModel } from 'drizzle-orm';
 
 // ================================
 // ZOD VALIDATION ADAPTER
@@ -24,17 +25,17 @@ import type {
 
 export interface ZodAdapterOptions<T extends DrizzleTableWithId> {
 	// Override specific schemas
-	insert?: (table: T) => $ZodType<T['$inferInsert']>;
-	update?: (table: T) => $ZodType<Partial<T['$inferInsert']>>;
+	insert?: (table: T) => $ZodType<InferSelectModel<T>>;
+	update?: (table: T) => $ZodType<Partial<InferSelectModel<T>>>;
 	list?: (table: T, options: ListSchemaOptions<T>) => $ZodType<ListParams<T>>;
 	pagination?: (options: PaginationOptions) => $ZodType<PaginationParams>;
-	id?: (table: T) => $ZodType<T['$inferSelect']['id']>;
+	id?: (table: T) => $ZodType<InferSelectModel<T>['id']>;
 	filter?: (
-		allowedFilters?: (keyof T['$inferSelect'])[],
+		allowedFilters?: (keyof InferSelectModel<T>)[],
 	) => $ZodType<FilterParams<T>>;
 	orderBy?: (
 		table: T,
-		allowedFields?: (keyof T['$inferSelect'])[],
+		allowedFields?: (keyof InferSelectModel<T>)[],
 	) => $ZodType<OrderByParams<T>>;
 }
 
@@ -70,7 +71,7 @@ export function zod<T extends DrizzleTableWithId = DrizzleTableWithId>(
 			return options.id ? options.id(table) : createDefaultIdSchema(table);
 		},
 
-		createFilterSchema: (allowedFilters?: (keyof T['$inferSelect'])[]) => {
+		createFilterSchema: (allowedFilters?: (keyof InferSelectModel<T>)[]) => {
 			return options.filter
 				? options.filter(allowedFilters)
 				: createDefaultFilterSchema(allowedFilters);
@@ -78,7 +79,7 @@ export function zod<T extends DrizzleTableWithId = DrizzleTableWithId>(
 
 		createOrderBySchema: (
 			table: T,
-			allowedFields?: (keyof T['$inferSelect'])[],
+			allowedFields?: (keyof InferSelectModel<T>)[],
 		) => {
 			return options.orderBy
 				? options.orderBy(table, allowedFields)
@@ -124,7 +125,7 @@ export function createDefaultIdSchema<T extends DrizzleTableWithId>(table: T) {
 }
 
 export function createDefaultFilterSchema<T extends DrizzleTable>(
-	allowedFilters?: (keyof T['$inferSelect'])[],
+	allowedFilters?: (keyof InferSelectModel<T>)[],
 ) {
 	if (!allowedFilters || allowedFilters.length === 0) {
 		return z.record(z.never(), z.never()).optional();
@@ -167,9 +168,9 @@ export function createDefaultFilterSchema<T extends DrizzleTable>(
 
 export function createDefaultOrderBySchema<T extends DrizzleTable>(
 	table: T,
-	allowedFields?: (keyof T['$inferSelect'])[],
+	allowedFields?: (keyof InferSelectModel<T>)[],
 ) {
-	const tableFields = Object.keys(table) as (keyof T['$inferSelect'])[];
+	const tableFields = Object.keys(table) as (keyof InferSelectModel<T>)[];
 	const validFields = allowedFields || tableFields;
 
 	return z

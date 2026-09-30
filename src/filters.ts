@@ -12,6 +12,7 @@ import {
 	notInArray,
 	notLike,
 	or,
+	type InferSelectModel,
 	type SQL,
 } from 'drizzle-orm';
 
@@ -23,8 +24,8 @@ import type {
 
 export function filtersToWhere<T extends DrizzleTableWithId>(
 	table: T,
-	filters?: FilterParams<T['$inferSelect']>,
-	allowedFilters: (keyof T['$inferSelect'])[] = [],
+	filters?: FilterParams<InferSelectModel<T>>,
+	allowedFilters: (keyof InferSelectModel<T>)[] = [],
 ): SQL | undefined {
 	const conditions = parseFilters(table, filters, allowedFilters);
 
@@ -33,8 +34,8 @@ export function filtersToWhere<T extends DrizzleTableWithId>(
 
 export function parseFilters<T extends DrizzleTableWithId>(
 	table: T,
-	filters?: FilterParams<T['$inferSelect']>,
-	allowedFilters: (keyof T['$inferSelect'])[] = [],
+	filters?: FilterParams<InferSelectModel<T>>,
+	allowedFilters: (keyof InferSelectModel<T>)[] = [],
 ): SQL[] {
 	if (!filters) return [];
 
@@ -81,7 +82,9 @@ export function parseFilters<T extends DrizzleTableWithId>(
 		delete otherFilters.OR;
 
 		if (Object.keys(otherFilters).length > 0) {
-			conditions.push(...parseFilterGroup(table, otherFilters, allowedFilters));
+			conditions.push(
+				...parseFilterGroup(table, otherFilters, allowedFilters),
+			);
 		}
 
 		return conditions;
@@ -93,7 +96,7 @@ export function parseFilters<T extends DrizzleTableWithId>(
 export function parseFilterGroup<T extends DrizzleTableWithId>(
 	table: T,
 	filters: Record<string, any>,
-	allowedFilters: (keyof T['$inferSelect'])[] = [],
+	allowedFilters: (keyof InferSelectModel<T>)[] = [],
 ): SQL[] {
 	const conditions: SQL[] = [];
 
@@ -106,12 +109,12 @@ export function parseFilterGroup<T extends DrizzleTableWithId>(
 		// If allowedFilters is specified and not empty, check if key is allowed
 		if (
 			allowedFilters.length > 0 &&
-			!allowedFilters.includes(key as keyof T['$inferSelect'])
+			!allowedFilters.includes(key as keyof InferSelectModel<T>)
 		) {
 			return;
 		}
 
-		const column = table[key as keyof T] as DrizzleColumn<any, any, any>;
+		const column = table[key as keyof T] as DrizzleColumn<any, any>;
 
 		if (
 			typeof filterValue === 'object' &&
@@ -141,12 +144,18 @@ export function parseFilterGroup<T extends DrizzleTableWithId>(
 						break;
 					case 'in':
 						conditions.push(
-							inArray(column, Array.isArray(value) ? value : [value]),
+							inArray(
+								column,
+								Array.isArray(value) ? value : [value],
+							),
 						);
 						break;
 					case 'notIn':
 						conditions.push(
-							notInArray(column, Array.isArray(value) ? value : [value]),
+							notInArray(
+								column,
+								Array.isArray(value) ? value : [value],
+							),
 						);
 						break;
 					case 'like':

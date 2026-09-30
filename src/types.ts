@@ -1,13 +1,15 @@
 import type {
 	Column as DrizzleColumn,
 	Table as DrizzleTable,
+	InferInsertModel,
+	InferSelectModel,
 	SQL,
 } from 'drizzle-orm';
-import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import type { StandardSchemaV1 } from './standard-schema.ts';
+import type { SQLiteAsyncDatabase } from 'drizzle-orm/sqlite-core';
 
-export type DrizzleDatabase = BaseSQLiteDatabase<any, any, any, any>;
+export type DrizzleDatabase = SQLiteAsyncDatabase<any, any, any>;
 
 export type { DrizzleTable, DrizzleColumn };
 
@@ -34,11 +36,11 @@ export type FilterValue<T> =
 	  };
 
 export type ColumnsSelection<T extends DrizzleTableWithId> = Partial<
-	Record<keyof T['$inferSelect'], boolean>
+	Record<keyof InferSelectModel<T>, boolean>
 >;
 
 export type SoftDeleteConfig<T extends DrizzleTable> = {
-	field: keyof T['$inferSelect']; // e.g., 'deletedAt' or 'isDeleted'
+	field: keyof InferSelectModel<T>; // e.g., 'deletedAt' or 'isDeleted'
 	deletedValue?: any; // What to set when soft deleting (defaults to new Date() for timestamps, true for booleans)
 	notDeletedValue?: any; // What represents "not deleted" (defaults to null for timestamps, false for booleans)
 };
@@ -65,7 +67,7 @@ export type CrudOptions<
 	TActor extends Actor = Actor,
 	TScopeFilters extends ScopeFilters<T, TActor> = ScopeFilters<T, TActor>,
 > = {
-	searchFields?: (keyof T['$inferSelect'])[];
+	searchFields?: (keyof InferSelectModel<T>)[];
 	/**
 	 * The default page size (items per page).
 	 * @default 20
@@ -80,7 +82,7 @@ export type CrudOptions<
 	 * The allowed fields to be used in the filters parameter.
 	 * e.g., ['name', 'email']
 	 */
-	allowedFilters?: (keyof T['$inferSelect'])[];
+	allowedFilters?: (keyof InferSelectModel<T>)[];
 	/**
 	 * Enable soft delete for the table.
 	 * e.g., { field: 'deletedAt', deletedValue: new Date(), notDeletedValue: null }
@@ -100,10 +102,10 @@ export type CrudOptions<
 			context: OperationContext<TDatabase, T, TActor, TScopeFilters>;
 			operation: CrudOperation | 'custom';
 		}) => boolean;
-		beforeCreate?: (data: T['$inferInsert']) => T['$inferInsert'];
+		beforeCreate?: (data: InferInsertModel<T>) => InferInsertModel<T>;
 		beforeUpdate?: (
-			data: Partial<T['$inferInsert']>,
-		) => Partial<T['$inferInsert']>;
+			data: Partial<InferInsertModel<T>>,
+		) => Partial<InferInsertModel<T>>;
 	};
 	/**
 	 * Validation adapter is used to validate the data.
@@ -115,9 +117,9 @@ export type ListParams<T extends DrizzleTableWithId> = {
 	page?: number;
 	perPage?: number;
 	search?: string;
-	filters?: FilterParams<T['$inferSelect']>;
+	filters?: FilterParams<InferSelectModel<T>>;
 	orderBy?: {
-		field: keyof T['$inferSelect'];
+		field: keyof InferSelectModel<T>;
 		direction: 'asc' | 'desc';
 	}[];
 	includeDeleted?: boolean;
@@ -141,16 +143,14 @@ export type ScopeFilters<
 	T extends DrizzleTable,
 	TActor extends Actor = Actor,
 > = Partial<{
-	[K in keyof T['$inferSelect']]: (
-		value: T['$inferSelect'][K],
+	[K in keyof InferSelectModel<T>]: (
+		value: InferSelectModel<T>[K],
 		actor: TActor,
 	) => SQL | undefined;
 }> &
 	Record<string, (value: any, actor: TActor) => SQL | undefined>;
 
-type ScopeFromFilters<T> = T extends Record<infer K, any>
-	? Partial<Record<K, any>>
-	: Record<string, any>;
+type ScopeFromFilters<T> = T extends Record<infer K, any> ? Partial<Record<K, any>>	: Record<string, any>;
 
 export type OperationContext<
 	TDatabase extends DrizzleDatabase,
@@ -180,7 +180,7 @@ export type PaginatedResponse<T> = {
 };
 
 export type OrderByParams<T extends DrizzleTable> = {
-	field: keyof T['$inferSelect'];
+	field: keyof InferSelectModel<T>;
 	direction: 'asc' | 'desc';
 };
 
@@ -208,11 +208,11 @@ export type FilterParams<T extends Record<string, any>> = {
 export interface ValidationAdapter<
 	T extends DrizzleTableWithId = DrizzleTableWithId,
 > {
-	createInsertSchema: <TSchema extends StandardSchemaV1<T['$inferInsert']>>(
+	createInsertSchema: <TSchema extends StandardSchemaV1<InferInsertModel<T>>>(
 		table: T,
 	) => TSchema;
 	createUpdateSchema: <
-		TSchema extends StandardSchemaV1<Partial<T['$inferInsert']>>,
+		TSchema extends StandardSchemaV1<Partial<InferInsertModel<T>>>,
 	>(
 		table: T,
 	) => TSchema;
@@ -220,18 +220,22 @@ export interface ValidationAdapter<
 		table: T,
 		options: ListSchemaOptions<T>,
 	) => TSchema;
-	createPaginationSchema: <TSchema extends StandardSchemaV1<PaginationParams>>(
+	createPaginationSchema: <
+		TSchema extends StandardSchemaV1<PaginationParams>,
+	>(
 		options: PaginationOptions,
 	) => TSchema;
-	createIdSchema: <TSchema extends StandardSchemaV1<T['$inferSelect']['id']>>(
+	createIdSchema: <
+		TSchema extends StandardSchemaV1<InferSelectModel<T>['id']>,
+	>(
 		table: T,
 	) => TSchema;
 	createFilterSchema: <TSchema extends StandardSchemaV1<FilterParams<T>>>(
-		allowedFilters?: (keyof T['$inferSelect'])[],
+		allowedFilters?: (keyof InferSelectModel<T>)[],
 	) => TSchema;
 	createOrderBySchema: <TSchema extends StandardSchemaV1<OrderByParams<T>>>(
 		table: T,
-		allowedFields?: (keyof T['$inferSelect'])[],
+		allowedFields?: (keyof InferSelectModel<T>)[],
 	) => TSchema;
 }
 
@@ -241,9 +245,9 @@ export interface PaginationOptions {
 }
 
 export interface ListSchemaOptions<T extends DrizzleTable> {
-	searchFields?: (keyof T['$inferSelect'])[];
-	allowedFilters?: (keyof T['$inferSelect'])[];
-	allowedOrderFields?: (keyof T['$inferSelect'])[];
+	searchFields?: (keyof InferSelectModel<T>)[];
+	allowedFilters?: (keyof InferSelectModel<T>)[];
+	allowedOrderFields?: (keyof InferSelectModel<T>)[];
 	defaultPageSize?: number;
 	maxPageSize?: number;
 	allowIncludeDeleted?: boolean;

@@ -1,4 +1,4 @@
-import { and, inArray, type SQL } from 'drizzle-orm';
+import { and, inArray, type InferSelectModel, type SQL } from 'drizzle-orm';
 import type {
 	Actor,
 	CrudOptions,
@@ -35,7 +35,7 @@ export function createBulkRestoreMethod<
 	const { softDelete } = options;
 
 	return async (
-		ids: T['$inferSelect']['id'][],
+		ids: InferSelectModel<T>['id'][],
 		context?: Omit<
 			OperationContext<TDatabase, T, TActor, TScopeFilters>,
 			'skipValidation'

@@ -1,3 +1,4 @@
+import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import type { StandardSchemaV1 } from '../standard-schema.ts';
 import type {
 	Actor,
@@ -19,7 +20,7 @@ export type BulkCreateContext<
 	table: T;
 	options: CrudOptions<TDatabase, T, TActor, TScopeFilters>;
 	schemas: {
-		insertSchema?: StandardSchemaV1<T['$inferInsert']>;
+		insertSchema?: StandardSchemaV1<InferInsertModel<T>>;
 	};
 };
 
@@ -34,12 +35,12 @@ export function createBulkCreateMethod<
 	const validate = createValidate(hooks);
 
 	return async (
-		data: T['$inferInsert'][],
+		data: InferInsertModel<T>[],
 		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
 	): Promise<{
 		success: boolean;
 		count: number;
-		items: T['$inferSelect'][];
+		items: InferSelectModel<T>[];
 	}> => {
 		// Handle empty array
 		if (data.length === 0) {
@@ -75,7 +76,7 @@ export function createBulkCreateMethod<
 		return {
 			success: true,
 			count: items.length,
-			items: items as T['$inferSelect'][],
+			items: items as InferSelectModel<T>[],
 		};
 	};
 }
