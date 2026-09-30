@@ -1,4 +1,10 @@
-import { and, eq, type SQL } from 'drizzle-orm';
+import {
+	and,
+	eq,
+	type InferInsertModel,
+	type InferSelectModel,
+	type SQL,
+} from 'drizzle-orm';
 import type { StandardSchemaV1 } from '../standard-schema.ts';
 import type {
 	Actor,
@@ -20,7 +26,7 @@ export type UpdateContext<
 	table: T;
 	options: CrudOptions<TDatabase, T, TActor, TScopeFilters>;
 	schemas: {
-		updateSchema?: StandardSchemaV1<Partial<T['$inferInsert']>>;
+		updateSchema?: StandardSchemaV1<Partial<InferInsertModel<T>>>;
 	};
 	applyScopeFilters: (
 		conditions: SQL[],
@@ -47,10 +53,10 @@ export function createUpdateMethod<
 	const validate = createValidate(hooks);
 
 	return async (
-		id: T['$inferSelect']['id'],
-		updates: Partial<T['$inferInsert']>,
+		id: InferSelectModel<T>['id'],
+		updates: Partial<InferInsertModel<T>>,
 		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
-	): Promise<T['$inferSelect']> => {
+	): Promise<InferSelectModel<T>> => {
 		const validatedData = await validate(
 			'update',
 			updates,
@@ -71,7 +77,7 @@ export function createUpdateMethod<
 				.from(table)
 				.where(eq(table.id, id))
 				.limit(1);
-			return existing as T['$inferSelect'];
+			return existing as InferSelectModel<T>;
 		}
 
 		const dbInstance = getDb(db, context);
@@ -97,6 +103,6 @@ export function createUpdateMethod<
 			throw new Error(`Record with id ${id} not found`);
 		}
 
-		return result as T['$inferSelect'];
+		return result as InferSelectModel<T>;
 	};
 }

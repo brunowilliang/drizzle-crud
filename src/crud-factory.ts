@@ -1,15 +1,15 @@
 import { eq, isNull, like, or, SQL } from 'drizzle-orm';
 
-import { createBulkCreateMethod } from './crud/bulkCreate.ts';
-import { createBulkDeleteMethod } from './crud/bulkDelete.ts';
-import { createBulkRestoreMethod } from './crud/bulkRestore.ts';
-import { createCreateMethod } from './crud/create.ts';
-import { createDeleteOneMethod } from './crud/deleteOne.ts';
-import { createFindOneMethod } from './crud/findOne.ts';
-import { createListMethod } from './crud/list.ts';
-import { createPermanentDeleteMethod } from './crud/permanentDelete.ts';
-import { createRestoreMethod } from './crud/restore.ts';
-import { createUpdateMethod } from './crud/update.ts';
+import { createBulkCreateMethod } from './crud/bulkCreate';
+import { createBulkDeleteMethod } from './crud/bulkDelete';
+import { createBulkRestoreMethod } from './crud/bulkRestore';
+import { createCreateMethod } from './crud/create';
+import { createDeleteOneMethod } from './crud/deleteOne';
+import { createFindOneMethod } from './crud/findOne';
+import { createListMethod } from './crud/list';
+import { createPermanentDeleteMethod } from './crud/permanentDelete';
+import { createRestoreMethod } from './crud/restore';
+import { createUpdateMethod } from './crud/update';
 import type {
 	Actor,
 	CrudOptions,
@@ -20,7 +20,7 @@ import type {
 	OperationContext,
 	ScopeFilters,
 	ValidationAdapter,
-} from './types.ts';
+} from './types';
 
 function createSchemas<
 	TDatabase extends DrizzleDatabase,
@@ -106,12 +106,12 @@ export function crudFactory<
 
 	const tableName = (table as any)[
 		tableNameSymbol
-	] as keyof TDatabase['_']['fullSchema'];
+	] as keyof TDatabase['_']['relations'];
 
 	const schemas = createSchemas(table, options, validation);
 
-	const getColumn = (key: keyof T['$inferInsert']) => {
-		return table[key as keyof T] as DrizzleColumn<any, any, any>;
+	const getColumn = (key: keyof T['_']['columns']) => {
+		return table[key as keyof T] as DrizzleColumn<any, any>;
 	};
 
 	const applySearch = (conditions: SQL[], search?: string) => {

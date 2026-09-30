@@ -1,10 +1,10 @@
-import type { KnownKeysOnly } from 'drizzle-orm';
-import { and, asc, count, desc, type SQL } from 'drizzle-orm';
 import type {
-	BuildQueryResult,
-	DBQueryConfig,
-	ExtractTablesWithRelations,
-} from 'drizzle-orm/relations';
+	InferInsertModel,
+	InferSelectModel,
+	KnownKeysOnly,
+} from 'drizzle-orm';
+import { and, asc, count, desc, type SQL } from 'drizzle-orm';
+import type { BuildQueryResult, DBQueryConfig } from 'drizzle-orm/relations';
 import { parseFilters } from '../filters.ts';
 import type { StandardSchemaV1 } from '../standard-schema.ts';
 import type {
@@ -27,16 +27,16 @@ export type ListContext<
 > = {
 	db: TDatabase;
 	table: T;
-	tableName: keyof TDatabase['_']['fullSchema'];
+	tableName: keyof TDatabase['_']['relations'];
 	options: CrudOptions<TDatabase, T, TActor, TScopeFilters>;
 	schemas: {
 		listSchema?: StandardSchemaV1<ListParams<T>>;
 	};
 	defaultPageSize: number;
 	maxPageSize: number;
-	searchFields: (keyof T['$inferSelect'])[];
-	allowedFilters: (keyof T['$inferSelect'])[];
-	getColumn: (key: keyof T['$inferInsert']) => DrizzleColumn<any, any, any>;
+	searchFields: (keyof InferSelectModel<T>)[];
+	allowedFilters: (keyof InferSelectModel<T>)[];
+	getColumn: (key: keyof InferInsertModel<T>) => DrizzleColumn<any, any>;
 	applySearch: (conditions: SQL[], search?: string) => void;
 	applyScopeFilters: (
 		conditions: SQL[],
@@ -68,12 +68,14 @@ export function createListMethod<
 
 	const validate = createValidate(options.hooks);
 
-	type TSchema = ExtractTablesWithRelations<TDatabase['_']['fullSchema']>;
+	type TSchema = TDatabase['_']['relations'];
 	type TFields = TSchema[typeof tableName];
-	type QueryManyGeneric = DBQueryConfig<'many', true, TSchema, TFields>;
+	type QueryManyGeneric = DBQueryConfig<'many', TSchema, TFields>;
 	type ListGeneric = Omit<QueryManyGeneric, 'offset' | 'where'> &
 		ListParams<T> & {
-			where?: SQL;
+			where?: QueryManyGeneric['where'] & {
+				RAW?: SQL;
+			};
 		};
 	type ListInput<TSelections extends ListGeneric> = KnownKeysOnly<
 		TSelections,
@@ -93,7 +95,7 @@ export function createListMethod<
 		hasPreviousPage: boolean;
 		page: number;
 		perPage: number;
-		results: T['$inferSelect'][];
+		results: InferSelectModel<T>[];
 		totalItems: number;
 		totalPages: number;
 	}>;
@@ -117,7 +119,7 @@ export function createListMethod<
 		hasPreviousPage: boolean;
 		page: number;
 		perPage: number;
-		results: ListResult<TSelections> | T['$inferSelect'][];
+		results: ListResult<TSelections> | InferSelectModel<T>[];
 		totalItems: number;
 		totalPages: number;
 	}> {
@@ -134,8 +136,8 @@ export function createListMethod<
 		// Build where conditions
 		const conditions: SQL[] = [];
 
-		if ('where' in params && params.where) {
-			conditions.push(params.where);
+		if ('where' in params && params.where?.RAW) {
+			conditions.push(params.where.RAW);
 		}
 
 		const parsedFilters = parseFilters(
@@ -159,7 +161,7 @@ export function createListMethod<
 		const offset = (page - 1) * perPage;
 
 		const orderBy = validatedParams.orderBy?.map(({ field, direction }) => {
-			const column = getColumn(field as keyof T['$inferInsert']);
+			const column = getColumn(field as keyof InferInsertModel<T>);
 			return direction === 'desc' ? desc(column) : asc(column);
 		});
 

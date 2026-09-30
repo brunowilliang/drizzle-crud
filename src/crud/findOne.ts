@@ -1,10 +1,10 @@
-import type { KnownKeysOnly } from 'drizzle-orm';
-import { and, eq, type SQL } from 'drizzle-orm';
 import type {
-	BuildQueryResult,
-	DBQueryConfig,
-	ExtractTablesWithRelations,
-} from 'drizzle-orm/relations';
+	InferInsertModel,
+	InferSelectModel,
+	KnownKeysOnly,
+} from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
+import type { BuildQueryResult, DBQueryConfig } from 'drizzle-orm/relations';
 import type {
 	Actor,
 	CrudOptions,
@@ -25,9 +25,9 @@ export type FindOneContext<
 > = {
 	db: TDatabase;
 	table: T;
-	tableName: keyof TDatabase['_']['fullSchema'];
+	tableName: keyof TDatabase['_']['relations'];
 	options: CrudOptions<TDatabase, T, TActor, TScopeFilters>;
-	getColumn: (key: keyof T['$inferInsert']) => DrizzleColumn<any, any, any>;
+	getColumn: (key: keyof InferInsertModel<T>) => DrizzleColumn<any, any>;
 	applyScopeFilters: (
 		conditions: SQL[],
 		context?: OperationContext<TDatabase, T, TActor, TScopeFilters>,
@@ -50,9 +50,9 @@ export function createFindOneMethod<
 		applySoftDeleteFilter,
 	} = ctx;
 
-	type TSchema = ExtractTablesWithRelations<TDatabase['_']['fullSchema']>;
+	type TSchema = TDatabase['_']['relations'];
 	type TFields = TSchema[typeof tableName];
-	type QueryOneGeneric = DBQueryConfig<'one', true, TSchema, TFields>;
+	type QueryOneGeneric = DBQueryConfig<'one', TSchema, TFields>;
 	type FindOneInput<TSelections extends QueryOneGeneric> = KnownKeysOnly<
 		TSelections,
 		QueryOneGeneric
@@ -64,15 +64,15 @@ export function createFindOneMethod<
 	>;
 
 	function findOne(
-		where: Partial<T['$inferSelect']>,
+		where: Partial<InferSelectModel<T>>,
 		params?: FindByIdParams,
 		context?: Omit<
 			OperationContext<TDatabase, T, TActor, TScopeFilters>,
 			'skipValidation'
 		>,
-	): Promise<T['$inferSelect'] | null>;
+	): Promise<InferSelectModel<T> | null>;
 	function findOne<TSelections extends QueryOneGeneric>(
-		where: Partial<T['$inferSelect']>,
+		where: Partial<InferSelectModel<T>>,
 		params?: FindOneInput<TSelections> & FindByIdParams,
 		context?: Omit<
 			OperationContext<TDatabase, T, TActor, TScopeFilters>,
@@ -80,20 +80,20 @@ export function createFindOneMethod<
 		>,
 	): Promise<FindOneResult<TSelections> | null>;
 	async function findOne<TSelections extends QueryOneGeneric = QueryOneGeneric>(
-		where: Partial<T['$inferSelect']>,
+		where: Partial<InferSelectModel<T>>,
 		params?: (FindOneInput<TSelections> & FindByIdParams) | FindByIdParams,
 		context?: Omit<
 			OperationContext<TDatabase, T, TActor, TScopeFilters>,
 			'skipValidation'
 		>,
-	): Promise<FindOneResult<TSelections> | T['$inferSelect'] | null> {
+	): Promise<FindOneResult<TSelections> | InferSelectModel<T> | null> {
 		const dbInstance = getDb(db, context);
 		const conditions: SQL[] = [];
 
 		// Build conditions from the where object
 		Object.entries(where).forEach(([key, value]) => {
 			if (value !== undefined) {
-				const column = getColumn(key as keyof T['$inferInsert']);
+				const column = getColumn(key as keyof InferInsertModel<T>);
 				conditions.push(eq(column, value));
 			}
 		});

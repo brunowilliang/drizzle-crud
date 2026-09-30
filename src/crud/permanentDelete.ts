@@ -1,4 +1,4 @@
-import { and, eq, type SQL } from 'drizzle-orm';
+import { and, eq, type InferSelectModel, type SQL } from 'drizzle-orm';
 import type {
 	Actor,
 	CrudOptions,
@@ -33,7 +33,7 @@ export function createPermanentDeleteMethod<
 	const { db, table, applyScopeFilters } = ctx;
 
 	return async (
-		id: T['$inferSelect']['id'],
+		id: InferSelectModel<T>['id'],
 		context?: Omit<
 			OperationContext<TDatabase, T, TActor, TScopeFilters>,
 			'skipValidation'
